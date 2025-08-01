@@ -77,7 +77,7 @@ class StayCharliePriceMonitor:
                 "chat_id": "",
                 "phone_number": ""
             },
-            "price_drop_threshold_percent": 5.0,
+            "price_change_threshold_percent": 0.0,
             "discount_percent": 25.0
         }
         
@@ -621,23 +621,26 @@ Para testar, use: `python price_monitor.py --test-telegram`
             logger.error(f"Erro ao enviar notificação Telegram: {e}")
             return False
 
-    def check_price_drop(self, current_price_info, last_price_info):
-        """Verifica se houve queda significativa no preço"""
+    def check_price_change(self, current_price_info, last_price_info):
+        """Verifica se houve mudança significativa no preço"""
         if last_price_info is None:
-            return False, 0
+            return False, 0, 'no_change'
         
         # Compara preço total com desconto (que é o que realmente importa)
         current_price = current_price_info['total_price_discounted']
         last_price = last_price_info.get('total_price_discounted', last_price_info.get('price', 0))
         
-        if current_price < last_price:
-            drop_percent = ((last_price - current_price) / last_price) * 100
-            threshold = self.config['price_drop_threshold_percent']
+        if current_price != last_price:
+            change_percent = abs(((current_price - last_price) / last_price) * 100)
+            threshold = self.config['price_change_threshold_percent']
             
-            if drop_percent >= threshold:
-                return True, drop_percent
+            if change_percent >= threshold:
+                if current_price < last_price:
+                    return True, change_percent, 'drop'
+                else:
+                    return True, change_percent, 'rise'
                 
-        return False, 0
+        return False, 0, 'no_change'
 
     def record_price(self, price_info):
         """Registra preço no histórico"""
@@ -674,43 +677,55 @@ Para testar, use: `python price_monitor.py --test-telegram`
             self.price_history.append(record)
             self.save_price_history()
             
-            # Verifica se houve queda significativa
-            is_drop, drop_percent = self.check_price_drop(price_info, last_price_info)
+            # Verifica se houve mudança significativa no preço
+            has_changed, change_percent, change_type = self.check_price_change(price_info, last_price_info)
             
-            if is_drop:
+            if has_changed:
                 # Formata mensagem detalhada
                 discount_pct = price_info['discount_percent']
                 
+                # Define emoji e título baseado no tipo de mudança
+                if change_type == 'drop':
+                    emoji = "📉"
+                    title = "PREÇO ABAIXOU!"
+                    change_desc = f"Queda de: {change_percent:.1f}%"
+                    log_msg = f"📉 PREÇO ABAIXOU {change_percent:.1f}%!"
+                else:
+                    emoji = "📈"
+                    title = "PREÇO SUBIU!"
+                    change_desc = f"Aumento de: {change_percent:.1f}%"
+                    log_msg = f"📈 PREÇO SUBIU {change_percent:.1f}%!"
+                
                 if price_info['night_price']:
                     price_details = f"""
-📅 Diária: R$ {price_info['night_price']:.2f} → R$ {price_info['night_price_discounted']:.2f} (com {discount_pct}% cupom)
-📊 Total: R$ {price_info['total_price']:.2f} → R$ {current_total_discounted:.2f} (com {discount_pct}% cupom)
+📅 Diária: R$ {price_info['night_price']:.2f} → R$ {price_info['night_price_discounted']:.2f} (com cupom interno Nubank {discount_pct}%)
+📊 Total: R$ {price_info['total_price']:.2f} → R$ {current_total_discounted:.2f} (com cupom interno Nubank {discount_pct}%)
                     """
                 else:
                     price_details = f"""
-📊 Total: R$ {price_info['total_price']:.2f} → R$ {current_total_discounted:.2f} (com {discount_pct}% cupom)
+📊 Total: R$ {price_info['total_price']:.2f} → R$ {current_total_discounted:.2f} (com cupom interno Nubank {discount_pct}%)
                     """
                 
                 message = f"""
-🎉 PREÇO ABAIXOU! 🎉
+{emoji} {title} {emoji}
 
 Hospedagem StayCharlie - Pinheiros
 Preço anterior (com cupom): R$ {last_total_discounted:.2f}
 Preço atual (com cupom): R$ {current_total_discounted:.2f}
-Queda de: {drop_percent:.1f}%
+{change_desc}
 
 {price_details}
 
 Link: {self.url}
 
-Monitore em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+Monitorado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
                 """
                 
-                logger.info(f"🎉 PREÇO ABAIXOU {drop_percent:.1f}%! De R$ {last_total_discounted:.2f} para R$ {current_total_discounted:.2f} (com cupom)")
+                logger.info(f"{log_msg} De R$ {last_total_discounted:.2f} para R$ {current_total_discounted:.2f} (com cupom interno Nubank)")
                 
                 # Envia notificações
                 self.send_email_notification(
-                    f"🎉 Preço Abaixou - StayCharlie ({drop_percent:.1f}%)",
+                    f"{emoji} Mudança de Preço - StayCharlie ({change_percent:.1f}%)",
                     message
                 )
                 
@@ -718,7 +733,10 @@ Monitore em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
                 
                 # Mostra notificação no sistema (macOS)
                 try:
-                    os.system(f'''osascript -e 'display notification "Preço abaixou {drop_percent:.1f}%! R$ {current_total_discounted:.2f} com cupom" with title "StayCharlie Monitor"' ''')
+                    if change_type == 'drop':
+                        os.system(f'''osascript -e 'display notification "Preço abaixou {change_percent:.1f}%! R$ {current_total_discounted:.2f} com cupom Nubank" with title "StayCharlie Monitor"' ''')
+                    else:
+                        os.system(f'''osascript -e 'display notification "Preço subiu {change_percent:.1f}%! R$ {current_total_discounted:.2f} com cupom Nubank" with title "StayCharlie Monitor"' ''')
                 except:
                     pass
 
@@ -837,13 +855,13 @@ def main():
         print("🧪 Testando notificação do Telegram...")
         current_time = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
         test_message = f"""
-🎉 TESTE DE NOTIFICAÇÃO 🎉
+📉 TESTE DE NOTIFICAÇÃO 📉
 
 Hospedagem StayCharlie - Pinheiros
 Este é um teste para verificar se as notificações estão funcionando!
 
-📅 Diária: R$ 312,37 → R$ 234,28 (com 25% cupom)
-📊 Total: R$ 1.414,50 → R$ 1.060,88 (com 25% cupom)
+📅 Diária: R$ 312,37 → R$ 234,28 (com cupom interno Nubank 25%)
+📊 Total: R$ 1.414,50 → R$ 1.060,88 (com cupom interno Nubank 25%)
 
 Link: https://www.staycharlie.com.br/charlie-nik-pinheiros
 

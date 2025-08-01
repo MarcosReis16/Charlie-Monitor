@@ -41,7 +41,7 @@ class StayCharliePriceMonitorCloud:
         self.telegram_bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
         self.telegram_chat_id = os.getenv('TELEGRAM_CHAT_ID')
         self.check_interval = int(os.getenv('CHECK_INTERVAL_MINUTES', '30'))
-        self.price_threshold = float(os.getenv('PRICE_THRESHOLD_PERCENT', '5.0'))
+        self.price_threshold = float(os.getenv('PRICE_THRESHOLD_PERCENT', '0.0'))
         self.discount_percent = float(os.getenv('DISCOUNT_PERCENT', '25.0'))
         
         logger.info("🚀 StayCharlie Monitor Cloud iniciado")
@@ -270,30 +270,40 @@ class StayCharliePriceMonitorCloud:
             current = price_info['total_price_discounted']
             previous = self.price_history[-2]['total_price_discounted']
             
-            if previous > current:
-                drop_percent = ((previous - current) / previous) * 100
+            if current != previous:
+                change_percent = abs(((current - previous) / previous) * 100)
                 
-                if drop_percent >= self.price_threshold:
+                if change_percent >= self.price_threshold:
+                    # Definir emoji e tipo de mudança
+                    if current < previous:
+                        emoji = "📉"
+                        title = f"PREÇO ABAIXOU {change_percent:.1f}%!"
+                        log_msg = f"📉 PREÇO ABAIXOU {change_percent:.1f}%!"
+                    else:
+                        emoji = "📈"
+                        title = f"PREÇO SUBIU {change_percent:.1f}%!"
+                        log_msg = f"📈 PREÇO SUBIU {change_percent:.1f}%!"
+                    
                     # Enviar alerta
                     current_time = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
                     message = f"""
-🎉 *PREÇO ABAIXOU {drop_percent:.1f}%!*
+{emoji} *{title}*
 
 *Hospedagem:* StayCharlie Nik Pinheiros
 *Data:* 08-12/09/2025 (4 noites)
 
-💰 *Novo preço:*
+💰 *Mudança de preço:*
 📅 Diária: R$ {price_info['daily_price']:.2f} → R$ {price_info['daily_price_discounted']:.2f}
 📊 Total: R$ {price_info['total_price']:.2f} → R$ {price_info['total_price_discounted']:.2f}
 
-💡 *Com cupom 5ANOS ({self.discount_percent}% desconto)*
+💡 *Com cupom interno Nubank ({self.discount_percent}% desconto)*
 
 🔗 [Reservar agora]({self.url})
 
 ⏰ Verificado em: {current_time}
                     """
                     
-                    logger.info(f"🎉 PREÇO ABAIXOU {drop_percent:.1f}%! De R$ {previous:.2f} para R$ {current:.2f} (com cupom)")
+                    logger.info(f"{log_msg} De R$ {previous:.2f} para R$ {current:.2f} (com cupom interno Nubank)")
                     self.send_telegram_notification(message.strip())
 
     def run_once(self):

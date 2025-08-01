@@ -16,7 +16,7 @@ TELEGRAM_BOT_TOKEN=8388369011:AAFPU0ouX2RMHmwLZ5OhlHl8iWP1zPTkWKI
 TELEGRAM_CHAT_ID=7665729772
 MONITOR_URL=https://www.staycharlie.com.br/charlie-nik-pinheiros?city=SP&start_date=2025-09-08&end_date=2025-09-12&guests=1
 CHECK_INTERVAL_MINUTES=30
-PRICE_THRESHOLD_PERCENT=5.0
+PRICE_THRESHOLD_PERCENT=0.0
 DISCOUNT_PERCENT=25.0
 ```
 
@@ -165,7 +165,7 @@ DISCOUNT_PERCENT=25.0
    heroku config:set TELEGRAM_CHAT_ID=7665729772
    heroku config:set MONITOR_URL="https://www.staycharlie.com.br/charlie-nik-pinheiros?city=SP&start_date=2025-09-08&end_date=2025-09-12&guests=1"
    heroku config:set CHECK_INTERVAL_MINUTES=30
-   heroku config:set PRICE_THRESHOLD_PERCENT=5.0
+   heroku config:set PRICE_THRESHOLD_PERCENT=0.0
    heroku config:set DISCOUNT_PERCENT=25.0
    ```
 
