@@ -18,7 +18,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException
-from webdriver_manager.chrome import ChromeDriverManager
+# Removido webdriver_manager - usando chromedriver instalado manualmente
 import re
 
 # Configuração de logging
@@ -118,8 +118,8 @@ class StayCharliePriceMonitorCloud:
         chrome_options.add_argument('--window-size=1920,1080')
         
         try:
-            # Instalar ChromeDriver automaticamente
-            service = Service(ChromeDriverManager().install())
+            # Usar ChromeDriver instalado manualmente no container
+            service = Service('/usr/local/bin/chromedriver')
             driver = webdriver.Chrome(service=service, options=chrome_options)
             driver.set_page_load_timeout(30)
             logger.info("✅ Driver do Chrome criado com sucesso")
