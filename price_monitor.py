@@ -40,12 +40,12 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 class StayCharliePriceMonitor:
-    def __init__(self, url, config_file='price_monitor_config.json'):
-        self.url = url
+    def __init__(self, config_file='price_monitor_config.json'):
         self.config_file = config_file
         self.price_history_file = 'price_history.json'
         self.config = self.load_config()
         self.price_history = self.load_price_history()
+        self.units = self.get_enabled_units()
         
         # Headers para simular um browser real
         self.headers = {
@@ -58,11 +58,48 @@ class StayCharliePriceMonitor:
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache',
         }
+        
+    def get_enabled_units(self):
+        """Retorna lista de unidades habilitadas para monitoramento"""
+        return [unit for unit in self.config.get('units_to_monitor', []) if unit.get('enabled', True)]
+    
+    def build_url(self, unit_slug):
+        """Constrói URL para uma unidade específica baseado nas configurações"""
+        settings = self.config.get('monitoring_settings', {})
+        
+        base_url = f"https://www.staycharlie.com.br/{unit_slug}"
+        params = []
+        
+        if settings.get('city'):
+            params.append(f"city={settings['city']}")
+        if settings.get('start_date'):
+            params.append(f"start_date={settings['start_date']}")
+        if settings.get('end_date'):
+            params.append(f"end_date={settings['end_date']}")
+        if settings.get('guests'):
+            params.append(f"guests={settings['guests']}")
+            
+        if params:
+            return f"{base_url}?{'&'.join(params)}"
+        return base_url
 
     def load_config(self):
         """Carrega configurações do arquivo JSON"""
         default_config = {
             "check_interval_minutes": 30,
+            "monitoring_settings": {
+                "city": "SP",
+                "start_date": "2025-09-08",
+                "end_date": "2025-09-12",
+                "guests": 1
+            },
+            "units_to_monitor": [
+                {
+                    "name": "Charlie Nik Pinheiros",
+                    "slug": "charlie-nik-pinheiros",
+                    "enabled": True
+                }
+            ],
             "email_notifications": {
                 "enabled": False,
                 "smtp_server": "smtp.gmail.com",
@@ -102,22 +139,34 @@ class StayCharliePriceMonitor:
             logger.error(f"Erro ao salvar config: {e}")
 
     def load_price_history(self):
-        """Carrega histórico de preços"""
+        """Carrega histórico de preços para múltiplas unidades"""
         if os.path.exists(self.price_history_file):
             try:
                 with open(self.price_history_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    history = json.load(f)
+                    # Se for uma lista (formato antigo), converte para o novo formato
+                    if isinstance(history, list):
+                        # Migra para novo formato se existir histórico antigo
+                        if history:
+                            return {"charlie-nik-pinheiros": history}
+                        else:
+                            return {}
+                    return history
             except Exception as e:
                 logger.error(f"Erro ao carregar histórico: {e}")
-        return []
+        return {}
 
     def save_price_history(self):
-        """Salva histórico de preços"""
+        """Salva histórico de preços para múltiplas unidades"""
         try:
             with open(self.price_history_file, 'w', encoding='utf-8') as f:
                 json.dump(self.price_history, f, indent=2, ensure_ascii=False)
         except Exception as e:
             logger.error(f"Erro ao salvar histórico: {e}")
+            
+    def get_unit_history(self, unit_slug):
+        """Retorna histórico de uma unidade específica"""
+        return self.price_history.get(unit_slug, [])
 
     def extract_price(self, html_content):
         """Extrai o preço da página HTML"""
@@ -197,10 +246,17 @@ class StayCharliePriceMonitor:
             logger.error(f"Erro ao extrair preço: {e}")
             return None, None
 
-    def fetch_price_with_selenium(self):
+    def fetch_price_with_selenium(self, url=None):
         """Faz requisição usando Selenium para executar JavaScript"""
         if not SELENIUM_AVAILABLE:
             logger.error("Selenium não está instalado")
+            return None
+            
+        # Se não receber URL, usa self.url (compatibilidade com código antigo)
+        target_url = url if url is not None else getattr(self, 'url', None)
+        
+        if not target_url:
+            logger.error("Nenhuma URL fornecida para fetch_price_with_selenium")
             return None
             
         driver = None
@@ -220,8 +276,8 @@ class StayCharliePriceMonitor:
             driver = webdriver.Chrome(options=chrome_options)
             driver.set_page_load_timeout(30)
             
-            logger.info(f"Acessando URL: {self.url}")
-            driver.get(self.url)
+            logger.info(f"Acessando URL: {target_url}")
+            driver.get(target_url)
             
             # Aguarda um pouco para o JavaScript carregar
             logger.info("Aguardando JavaScript carregar...")
@@ -370,16 +426,23 @@ class StayCharliePriceMonitor:
                 except:
                     pass
 
-    def fetch_price(self):
+    def fetch_price(self, url=None):
         """Faz requisição para o site e extrai o preço"""
         try:
-            logger.info("Verificando preço...")
+            # Se não receber URL, usa self.url (compatibilidade com código antigo)
+            target_url = url if url is not None else getattr(self, 'url', None)
+            
+            if not target_url:
+                logger.error("Nenhuma URL fornecida para fetch_price")
+                return None
+                
+            logger.info(f"Verificando preço para: {target_url}")
             
             # Cria uma sessão para manter cookies
             session = requests.Session()
             session.headers.update(self.headers)
             
-            response = session.get(self.url, timeout=30)
+            response = session.get(target_url, timeout=30)
             response.raise_for_status()
             
             logger.info(f"Status da resposta: {response.status_code}")
@@ -440,7 +503,7 @@ class StayCharliePriceMonitor:
                 # Tenta usar Selenium como fallback
                 if SELENIUM_AVAILABLE:
                     logger.info("Tentando buscar preço com Selenium...")
-                    selenium_price_info = self.fetch_price_with_selenium()
+                    selenium_price_info = self.fetch_price_with_selenium(target_url)
                     if selenium_price_info is not None:
                         return selenium_price_info
                 else:
@@ -642,8 +705,8 @@ Para testar, use: `python price_monitor.py --test-telegram`
                 
         return False, 0, 'no_change'
 
-    def record_price(self, price_info):
-        """Registra preço no histórico"""
+    def record_price(self, price_info, unit_slug=None):
+        """Registra preço no histórico para uma unidade específica"""
         if isinstance(price_info, (int, float)):
             # Compatibilidade com formato antigo
             price_info = {
@@ -654,16 +717,32 @@ Para testar, use: `python price_monitor.py --test-telegram`
                 'discount_percent': 0
             }
         
+        # Se não tiver unit_slug, usa como unidade padrão (compatibilidade)
+        if unit_slug is None:
+            unit_slug = "charlie-nik-pinheiros"
+            
+        # Inicializa histórico da unidade se não existir
+        if unit_slug not in self.price_history:
+            self.price_history[unit_slug] = []
+            
+        unit_history = self.price_history[unit_slug]
+        unit_name = price_info.get('unit_name', unit_slug)
+        
+        # Constrói URL se não estiver presente
+        url = self.build_url(unit_slug) if hasattr(self, 'build_url') else getattr(self, 'url', '')
+        
         record = {
             'timestamp': datetime.now().isoformat(),
             'price_info': price_info,
-            'url': self.url,
+            'url': url,
+            'unit_name': unit_name,
+            'unit_slug': unit_slug,
             # Mantém compatibilidade com formato antigo
             'price': price_info['total_price_discounted']
         }
         
         # Verifica se houve mudança significativa
-        last_record = self.price_history[-1] if self.price_history else None
+        last_record = unit_history[-1] if unit_history else None
         last_price_info = last_record.get('price_info') if last_record else None
         
         current_total_discounted = price_info['total_price_discounted']
@@ -672,9 +751,9 @@ Para testar, use: `python price_monitor.py --test-telegram`
         if last_price_info:
             last_total_discounted = last_price_info.get('total_price_discounted', last_record.get('price', 0))
         
-        # Só registra se houve mudança no preço ou se é o primeiro registro
-        if not self.price_history or abs(current_total_discounted - last_total_discounted) > 0.01:
-            self.price_history.append(record)
+        # Só registra se houve mudança no preço ou se é o primeiro registro para esta unidade
+        if not unit_history or abs(current_total_discounted - last_total_discounted) > 0.01:
+            unit_history.append(record)
             self.save_price_history()
             
             # Verifica se houve mudança significativa no preço
@@ -709,14 +788,14 @@ Para testar, use: `python price_monitor.py --test-telegram`
                 message = f"""
 {emoji} {title} {emoji}
 
-Hospedagem StayCharlie - Pinheiros
+{unit_name}
 Preço anterior (com cupom): R$ {last_total_discounted:.2f}
 Preço atual (com cupom): R$ {current_total_discounted:.2f}
 {change_desc}
 
 {price_details}
 
-Link: {self.url}
+Link: {url}
 
 Monitorado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
                 """
@@ -741,17 +820,40 @@ Monitorado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
                     pass
 
     def run_once(self):
-        """Executa uma verificação"""
-        price_info = self.fetch_price()
-        if price_info is not None:
-            self.record_price(price_info)
-            return True
-        return False
+        """Executa uma verificação para todas as unidades habilitadas"""
+        all_success = True
+        
+        for unit in self.units:
+            unit_name = unit.get('name', 'Unknown')
+            unit_slug = unit.get('slug', '')
+            
+            if not unit_slug:
+                logger.warning(f"Unidade {unit_name} não tem slug definido, pulando...")
+                continue
+                
+            logger.info(f"🏠 Verificando preços para: {unit_name}")
+            
+            url = self.build_url(unit_slug)
+            price_info = self.fetch_price(url)
+            
+            if price_info is not None:
+                # Adiciona informações da unidade
+                price_info['unit_name'] = unit_name
+                price_info['unit_slug'] = unit_slug
+                self.record_price(price_info, unit_slug)
+            else:
+                all_success = False
+                logger.error(f"❌ Falha ao verificar preços para {unit_name}")
+        
+        return all_success
 
     def run_monitor(self):
         """Executa o monitor em loop contínuo"""
-        logger.info(f"Iniciando monitoramento de preços para: {self.url}")
-        logger.info(f"Intervalo de verificação: {self.config['check_interval_minutes']} minutos")
+        enabled_units = [unit['name'] for unit in self.units]
+        logger.info(f"🚀 Iniciando monitoramento de preços para {len(enabled_units)} unidade(s):")
+        for unit in self.units:
+            logger.info(f"  🏠 {unit['name']} ({unit['slug']})")
+        logger.info(f"⏰ Intervalo de verificação: {self.config['check_interval_minutes']} minutos")
         
         while True:
             try:
@@ -771,61 +873,72 @@ Monitorado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
                 time.sleep(300)  # 5 minutos
 
     def show_history(self):
-        """Mostra histórico de preços"""
+        """Mostra histórico de preços para todas as unidades"""
         if not self.price_history:
             print("Nenhum preço registrado ainda.")
             return
         
         print("\n📊 Histórico de Preços StayCharlie:")
-        print("=" * 60)
+        print("=" * 70)
         
-        for record in self.price_history[-10:]:  # Últimos 10 registros
-            timestamp = datetime.fromisoformat(record['timestamp'])
-            price_info = record.get('price_info')
+        # Se for formato antigo (lista), converte e mostra
+        if isinstance(self.price_history, list):
+            print("\n🏠 Charlie Nik Pinheiros (formato legado):")
+            print("-" * 50)
+            for record in self.price_history[-10:]:  # Últimos 10 registros
+                self._show_record(record)
+            return
             
-            if price_info and isinstance(price_info, dict):
-                # Formato novo com informações detalhadas
-                discount_pct = price_info.get('discount_percent', 0)
+        # Formato novo (múltiplas unidades)
+        for unit_slug, unit_history in self.price_history.items():
+            if not unit_history:
+                continue
                 
-                if price_info.get('night_price'):
-                    night_original = price_info['night_price']
-                    night_discounted = price_info['night_price_discounted']
-                    total_original = price_info['total_price']
-                    total_discounted = price_info['total_price_discounted']
-                    
-                    print(f"\n🕐 {timestamp.strftime('%d/%m/%Y %H:%M')}")
-                    print(f"   📅 Diária: R$ {night_original:.2f} → R$ {night_discounted:.2f} (cupom {discount_pct}%)")
-                    print(f"   📊 Total:  R$ {total_original:.2f} → R$ {total_discounted:.2f} (cupom {discount_pct}%)")
-                else:
-                    total_original = price_info['total_price']
-                    total_discounted = price_info['total_price_discounted']
-                    
-                    print(f"\n🕐 {timestamp.strftime('%d/%m/%Y %H:%M')}")
-                    print(f"   📊 Total: R$ {total_original:.2f} → R$ {total_discounted:.2f} (cupom {discount_pct}%)")
-            else:
-                # Formato antigo (compatibilidade)
-                price = record.get('price', 0)
+            # Busca nome da unidade na configuração
+            unit_name = None
+            for unit in self.units:
+                if unit['slug'] == unit_slug:
+                    unit_name = unit['name']
+                    break
+            
+            if not unit_name:
+                unit_name = unit_history[-1].get('unit_name', unit_slug)
+                
+            print(f"\n🏠 {unit_name}:")
+            print("-" * 50)
+            
+            for record in unit_history[-10:]:  # Últimos 10 registros
+                self._show_record(record)
+                
+    def _show_record(self, record):
+        """Método auxiliar para exibir um registro de preço"""
+        timestamp = datetime.fromisoformat(record['timestamp'])
+        price_info = record.get('price_info')
+        
+        if price_info and isinstance(price_info, dict):
+            # Formato novo com informações detalhadas
+            discount_pct = price_info.get('discount_percent', 0)
+            
+            if price_info.get('night_price'):
+                night_original = price_info['night_price']
+                night_discounted = price_info['night_price_discounted']
+                total_original = price_info['total_price']
+                total_discounted = price_info['total_price_discounted']
+                
                 print(f"\n🕐 {timestamp.strftime('%d/%m/%Y %H:%M')}")
-                print(f"   💰 Preço: R$ {price:.2f}")
-        
-        if len(self.price_history) > 1:
-            # Calcula estatísticas baseadas no preço com desconto
-            first_record = self.price_history[0]
-            last_record = self.price_history[-1]
-            
-            first_price = self._get_discounted_price(first_record)
-            last_price = self._get_discounted_price(last_record)
-            
-            if first_price and last_price:
-                change = ((last_price - first_price) / first_price) * 100
+                print(f"   📅 Diária: R$ {night_original:.2f} → R$ {night_discounted:.2f} (cupom {discount_pct}%)")
+                print(f"   📊 Total:  R$ {total_original:.2f} → R$ {total_discounted:.2f} (cupom {discount_pct}%)")
+            else:
+                total_original = price_info['total_price']
+                total_discounted = price_info['total_price_discounted']
                 
-                all_discounted_prices = [self._get_discounted_price(r) for r in self.price_history]
-                all_discounted_prices = [p for p in all_discounted_prices if p is not None]
-                
-                print(f"\n📈 Estatísticas (preços com cupom):")
-                print(f"   📊 Variação total: {change:+.1f}%")
-                print(f"   💰 Menor preço: R$ {min(all_discounted_prices):.2f}")
-                print(f"   💸 Maior preço: R$ {max(all_discounted_prices):.2f}")
+                print(f"\n🕐 {timestamp.strftime('%d/%m/%Y %H:%M')}")
+                print(f"   📊 Total: R$ {total_original:.2f} → R$ {total_discounted:.2f} (cupom {discount_pct}%)")
+        else:
+            # Formato antigo (compatibilidade)
+            price = record.get('price', 0)
+            print(f"\n🕐 {timestamp.strftime('%d/%m/%Y %H:%M')}")
+            print(f"   💰 Preço: R$ {price:.2f}")
     
     def _get_discounted_price(self, record):
         """Extrai preço com desconto de um registro"""
@@ -836,8 +949,6 @@ Monitorado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
 
 def main():
     parser = argparse.ArgumentParser(description='Monitor de preços StayCharlie')
-    parser.add_argument('--url', default='https://www.staycharlie.com.br/charlie-nik-pinheiros?city=SP&start_date=2025-09-08&end_date=2025-09-12&guests=1', 
-                       help='URL para monitorar')
     parser.add_argument('--once', action='store_true', help='Executa apenas uma verificação')
     parser.add_argument('--history', action='store_true', help='Mostra histórico de preços')
     parser.add_argument('--config', action='store_true', help='Mostra configuração atual')
@@ -845,7 +956,7 @@ def main():
     
     args = parser.parse_args()
     
-    monitor = StayCharliePriceMonitor(args.url)
+    monitor = StayCharliePriceMonitor()
     
     if args.history:
         monitor.show_history()

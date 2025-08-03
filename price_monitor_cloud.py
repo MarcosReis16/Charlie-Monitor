@@ -36,7 +36,6 @@ logger = logging.getLogger(__name__)
 class StayCharliePriceMonitorCloud:
     def __init__(self):
         # Configurações via variáveis de ambiente
-        self.url = os.getenv('MONITOR_URL', 'https://www.staycharlie.com.br/charlie-nik-pinheiros?city=SP&start_date=2025-09-08&end_date=2025-09-12&guests=1')
         self.price_history_file = '/app/data/price_history.json'
         self.telegram_bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
         self.telegram_chat_id = os.getenv('TELEGRAM_CHAT_ID')
@@ -44,12 +43,18 @@ class StayCharliePriceMonitorCloud:
         self.price_threshold = float(os.getenv('PRICE_THRESHOLD_PERCENT', '0.0'))
         self.discount_percent = float(os.getenv('DISCOUNT_PERCENT', '25.0'))
         
+        # Carrega configuração de unidades e período (priorita ENV vars)
+        self.config = self.load_config()
+        self.price_history = self.load_price_history()
+        self.units = self.get_enabled_units()
+        
         logger.info("🚀 StayCharlie Monitor Cloud iniciado")
-        logger.info(f"📍 URL: {self.url}")
+        enabled_units = [unit['name'] for unit in self.units]
+        logger.info(f"🏠 Monitorando {len(enabled_units)} unidade(s):")
+        for unit in self.units:
+            logger.info(f"  • {unit['name']} ({unit['slug']})")
         logger.info(f"⏰ Intervalo: {self.check_interval} minutos")
         logger.info(f"📉 Limiar: {self.price_threshold}%")
-        
-        self.price_history = self.load_price_history()
         
         # Headers para simular um browser real
         self.headers = {
@@ -62,16 +67,88 @@ class StayCharliePriceMonitorCloud:
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache',
         }
+        
+    def load_config(self):
+        """Carrega configuração priorizando ENV vars, com fallback para configuração padrão"""
+        default_config = {
+            "monitoring_settings": {
+                "city": "SP",
+                "start_date": "2025-09-08", 
+                "end_date": "2025-09-12",
+                "guests": 1
+            },
+            "units_to_monitor": [
+                {
+                    "name": "Charlie Nik Pinheiros",
+                    "slug": "charlie-nik-pinheiros",
+                    "enabled": True
+                },
+                {
+                    "name": "Smart Charlie Mobi Pinheiros",
+                    "slug": "smart-charlie-mobi-pinheiros", 
+                    "enabled": True
+                }
+            ]
+        }
+        
+        # Override com ENV vars se disponíveis
+        city = os.getenv('MONITOR_CITY')
+        start_date = os.getenv('MONITOR_START_DATE') 
+        end_date = os.getenv('MONITOR_END_DATE')
+        guests = os.getenv('MONITOR_GUESTS')
+        
+        if city:
+            default_config['monitoring_settings']['city'] = city
+        if start_date:
+            default_config['monitoring_settings']['start_date'] = start_date
+        if end_date:
+            default_config['monitoring_settings']['end_date'] = end_date
+        if guests:
+            default_config['monitoring_settings']['guests'] = int(guests)
+            
+        return default_config
+        
+    def get_enabled_units(self):
+        """Retorna lista de unidades habilitadas para monitoramento"""
+        return [unit for unit in self.config.get('units_to_monitor', []) if unit.get('enabled', True)]
+    
+    def build_url(self, unit_slug):
+        """Constrói URL para uma unidade específica baseado nas configurações"""
+        settings = self.config.get('monitoring_settings', {})
+        
+        base_url = f"https://www.staycharlie.com.br/{unit_slug}"
+        params = []
+        
+        if settings.get('city'):
+            params.append(f"city={settings['city']}")
+        if settings.get('start_date'):
+            params.append(f"start_date={settings['start_date']}")
+        if settings.get('end_date'):
+            params.append(f"end_date={settings['end_date']}")
+        if settings.get('guests'):
+            params.append(f"guests={settings['guests']}")
+            
+        if params:
+            return f"{base_url}?{'&'.join(params)}"
+        return base_url
 
     def load_price_history(self):
-        """Carrega histórico de preços"""
+        """Carrega histórico de preços para múltiplas unidades"""
         if os.path.exists(self.price_history_file):
             try:
                 with open(self.price_history_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
+                    history = json.load(f)
+                    # Se for uma lista (formato antigo), converte para o novo formato
+                    if isinstance(history, list):
+                        # Migra para novo formato se existir histórico antigo
+                        if history:
+                            return {"charlie-nik-pinheiros": history}
+                        else:
+                            return {}
+                    return history
             except Exception as e:
                 logger.error(f"Erro ao carregar histórico: {e}")
-        return []
+        return {}
 
     def save_price_history(self):
         """Salva histórico de preços"""
@@ -128,16 +205,23 @@ class StayCharliePriceMonitorCloud:
             logger.error(f"❌ Erro ao criar driver: {e}")
             return None
 
-    def fetch_price(self):
+    def fetch_price(self, url=None):
         """Busca preços usando Selenium"""
+        # Se não receber URL, usa self.url (compatibilidade com código antigo)
+        target_url = url if url is not None else getattr(self, 'url', None)
+        
+        if not target_url:
+            logger.error("Nenhuma URL fornecida para fetch_price")
+            return None
+            
         driver = None
         try:
             driver = self.create_driver()
             if not driver:
                 return None
             
-            logger.info(f"🌐 Acessando URL: {self.url}")
-            driver.get(self.url)
+            logger.info(f"🌐 Acessando URL: {target_url}")
+            driver.get(target_url)
             
             # Aguardar JavaScript carregar
             logger.info("⏳ Aguardando JavaScript carregar...")
@@ -254,21 +338,45 @@ class StayCharliePriceMonitorCloud:
             logger.error(f"❌ Erro ao enviar Telegram: {e}")
             return False
 
-    def record_price(self, price_info):
-        """Registra preço no histórico e verifica alertas"""
-        self.price_history.append(price_info)
+    def record_price(self, price_info, unit_slug=None):
+        """Registra preço no histórico para uma unidade específica e verifica alertas"""
+        # Se não tiver unit_slug, usa como unidade padrão (compatibilidade)
+        if unit_slug is None:
+            unit_slug = "charlie-nik-pinheiros"
+            
+        # Inicializa histórico da unidade se não existir
+        if unit_slug not in self.price_history:
+            self.price_history[unit_slug] = []
+            
+        unit_history = self.price_history[unit_slug]
+        unit_name = price_info.get('unit_name', unit_slug)
         
-        # Manter apenas os últimos 100 registros
-        if len(self.price_history) > 100:
-            self.price_history = self.price_history[-100:]
+        # Constrói URL se não estiver presente
+        url = self.build_url(unit_slug)
+        
+        record = {
+            'timestamp': datetime.now().isoformat(),
+            'price_info': price_info,
+            'url': url,
+            'unit_name': unit_name,
+            'unit_slug': unit_slug,
+            # Mantém compatibilidade com formato antigo
+            'price': price_info['total_price_discounted']
+        }
+        
+        unit_history.append(record)
+        
+        # Manter apenas os últimos 100 registros por unidade
+        if len(unit_history) > 100:
+            self.price_history[unit_slug] = unit_history[-100:]
         
         # Salvar histórico
         self.save_price_history()
         
         # Verificar se deve enviar alerta
-        if len(self.price_history) >= 2:
+        if len(unit_history) >= 2:
             current = price_info['total_price_discounted']
-            previous = self.price_history[-2]['total_price_discounted']
+            previous = unit_history[-2]['price_info']['total_price_discounted']
             
             if current != previous:
                 change_percent = abs(((current - previous) / previous) * 100)
@@ -289,8 +397,7 @@ class StayCharliePriceMonitorCloud:
                     message = f"""
 {emoji} *{title}*
 
-*Hospedagem:* StayCharlie Nik Pinheiros
-*Data:* 08-12/09/2025 (4 noites)
+*Hospedagem:* {unit_name}
 
 💰 *Mudança de preço:*
 📅 Diária: R$ {price_info['daily_price']:.2f} → R$ {price_info['daily_price_discounted']:.2f}
@@ -298,7 +405,7 @@ class StayCharliePriceMonitorCloud:
 
 💡 *Com cupom interno Nubank ({self.discount_percent}% desconto)*
 
-🔗 [Reservar agora]({self.url})
+🔗 [Reservar agora]({url})
 
 ⏰ Verificado em: {current_time}
                     """
@@ -307,16 +414,37 @@ class StayCharliePriceMonitorCloud:
                     self.send_telegram_notification(message.strip())
 
     def run_once(self):
-        """Executa uma verificação"""
-        price_info = self.fetch_price()
-        if price_info is not None:
-            self.record_price(price_info)
-            return True
-        return False
+        """Executa uma verificação para todas as unidades habilitadas"""
+        all_success = True
+        
+        for unit in self.units:
+            unit_name = unit.get('name', 'Unknown')
+            unit_slug = unit.get('slug', '')
+            
+            if not unit_slug:
+                logger.warning(f"Unidade {unit_name} não tem slug definido, pulando...")
+                continue
+                
+            logger.info(f"🏠 Verificando preços para: {unit_name}")
+            
+            url = self.build_url(unit_slug)
+            price_info = self.fetch_price(url)
+            
+            if price_info is not None:
+                # Adiciona informações da unidade
+                price_info['unit_name'] = unit_name
+                price_info['unit_slug'] = unit_slug
+                self.record_price(price_info, unit_slug)
+            else:
+                all_success = False
+                logger.error(f"❌ Falha ao verificar preços para {unit_name}")
+        
+        return all_success
 
     def run_monitor(self):
         """Executa o monitor em loop contínuo"""
-        logger.info(f"🚀 Iniciando monitoramento de preços para: {self.url}")
+        enabled_units = [unit['name'] for unit in self.units]
+        logger.info(f"🚀 Iniciando monitoramento contínuo para {len(enabled_units)} unidade(s)")
         logger.info(f"⏰ Intervalo de verificação: {self.check_interval} minutos")
         
         while True:
