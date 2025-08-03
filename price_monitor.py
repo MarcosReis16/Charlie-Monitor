@@ -12,9 +12,6 @@ import logging
 from datetime import datetime
 from bs4 import BeautifulSoup
 import re
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 import argparse
 try:
     from selenium import webdriver
@@ -100,14 +97,6 @@ class StayCharliePriceMonitor:
                     "enabled": True
                 }
             ],
-            "email_notifications": {
-                "enabled": False,
-                "smtp_server": "smtp.gmail.com",
-                "smtp_port": 587,
-                "email": "",
-                "password": "",
-                "to_email": ""
-            },
             "telegram_notifications": {
                 "enabled": False,
                 "bot_token": "",
@@ -519,35 +508,6 @@ class StayCharliePriceMonitor:
             logger.error(f"Erro inesperado: {e}")
             return None
 
-    def send_email_notification(self, subject, message):
-        """Envia notificação por email"""
-        if not self.config['email_notifications']['enabled']:
-            return False
-        
-        try:
-            email_config = self.config['email_notifications']
-            
-            msg = MIMEMultipart()
-            msg['From'] = email_config['email']
-            msg['To'] = email_config['to_email']
-            msg['Subject'] = subject
-            
-            msg.attach(MIMEText(message, 'plain', 'utf-8'))
-            
-            server = smtplib.SMTP(email_config['smtp_server'], email_config['smtp_port'])
-            server.starttls()
-            server.login(email_config['email'], email_config['password'])
-            text = msg.as_string()
-            server.sendmail(email_config['email'], email_config['to_email'], text)
-            server.quit()
-            
-            logger.info("Email enviado com sucesso")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Erro ao enviar email: {e}")
-            return False
-
     def get_telegram_chat_id(self):
         """Descobre o chat_id do Telegram automaticamente"""
         if not self.config['telegram_notifications']['enabled']:
@@ -802,12 +762,7 @@ Monitorado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
                 
                 logger.info(f"{log_msg} De R$ {last_total_discounted:.2f} para R$ {current_total_discounted:.2f} (com cupom interno Nubank)")
                 
-                # Envia notificações
-                self.send_email_notification(
-                    f"{emoji} Mudança de Preço - StayCharlie ({change_percent:.1f}%)",
-                    message
-                )
-                
+                # Envia notificação via Telegram
                 self.send_telegram_notification(message)
                 
                 # Mostra notificação no sistema (macOS)
