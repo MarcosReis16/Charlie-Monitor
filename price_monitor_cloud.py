@@ -22,12 +22,18 @@ from selenium.common.exceptions import TimeoutException
 import re
 
 # Configuração de logging
+import sys
+
+# Configurar handler para stdout (não stderr) para evitar Railway interpretar como erro
+stdout_handler = logging.StreamHandler(sys.stdout)
+stdout_handler.setLevel(logging.INFO)
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler('/app/data/price_monitor.log'),
-        logging.StreamHandler()
+        stdout_handler
     ]
 )
 
@@ -233,7 +239,7 @@ class StayCharliePriceMonitorCloud:
                     EC.presence_of_element_located((By.TAG_NAME, "body"))
                 )
             except TimeoutException:
-                logger.warning("Timeout aguardando página carregar")
+                logger.info("⏱️ Timeout aguardando página carregar - continuando...")
             
             # Aguardar um pouco mais para garantir que os preços são carregados
             time.sleep(3)
@@ -296,7 +302,7 @@ class StayCharliePriceMonitorCloud:
                     'discount_percent': self.discount_percent
                 }
             else:
-                logger.warning("❌ Nenhum preço encontrado")
+                logger.info("ℹ️ Nenhum preço encontrado nesta verificação")
                 return None
                 
         except Exception as e:
@@ -313,7 +319,7 @@ class StayCharliePriceMonitorCloud:
     def send_telegram_notification(self, message):
         """Envia notificação para o Telegram"""
         if not self.telegram_bot_token or not self.telegram_chat_id:
-            logger.warning("⚠️ Telegram não configurado")
+            logger.info("ℹ️ Telegram não configurado - pulando notificação")
             return False
         
         try:
@@ -470,7 +476,7 @@ class StayCharliePriceMonitorCloud:
             unit_slug = unit.get('slug', '')
             
             if not unit_slug:
-                logger.warning(f"Unidade {unit_name} não tem slug definido, pulando...")
+                logger.info(f"ℹ️ Unidade {unit_name} não tem slug definido, pulando...")
                 continue
                 
             logger.info(f"🏠 Verificando preços para: {unit_name}")
@@ -533,7 +539,7 @@ Este é um teste para verificar se as notificações estão funcionando!
 📅 Diária: R$ 312,37 → R$ 234,28 (com 25% cupom)
 📊 Total: R$ 1.414,50 → R$ 1.060,88 (com 25% cupom)
 
-🔗 [Link da hospedagem]({monitor.url})
+🔗 [Link da hospedagem](https://www.staycharlie.com.br)
 
 ⏰ Testado em: {current_time}
         """
