@@ -47,6 +47,7 @@ debug_page_rendered.html
 
 # Local config (use environment variables in cloud)
 price_monitor_config.json
+.env
 
 # Selenium drivers
 chromedriver*

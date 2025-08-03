@@ -527,17 +527,25 @@ class StayCharliePriceMonitor:
             logger.error(f"Erro inesperado: {e}")
             return None
 
+    def get_telegram_config(self):
+        """Obtém configurações seguras do Telegram via variáveis de ambiente"""
+        bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+        chat_id = os.getenv('TELEGRAM_CHAT_ID')
+        
+        if not bot_token:
+            logger.error("⚠️ TELEGRAM_BOT_TOKEN não encontrado nas variáveis de ambiente")
+            return None, None
+            
+        return bot_token, chat_id
+
     def get_telegram_chat_id(self):
         """Descobre o chat_id do Telegram automaticamente"""
         if not self.config['telegram_notifications']['enabled']:
             return None
             
         try:
-            telegram_config = self.config['telegram_notifications']
-            bot_token = telegram_config['bot_token']
-            
+            bot_token, _ = self.get_telegram_config()
             if not bot_token:
-                logger.error("Token do bot Telegram não configurado")
                 return None
             
             # Busca atualizações recentes
@@ -623,19 +631,18 @@ Para testar, use: `python price_monitor.py --test-telegram`
             return False
             
         try:
-            telegram_config = self.config['telegram_notifications']
-            bot_token = telegram_config['bot_token']
-            chat_id = telegram_config['chat_id']
-            
+            bot_token, chat_id = self.get_telegram_config()
             if not bot_token:
-                logger.error("Token do bot Telegram não configurado")
                 return False
                 
-            # Tenta configurar chat_id se não estiver definido
+            # Tenta descobrir chat_id se não estiver definido
             if not chat_id:
-                if not self.setup_telegram_chat_id():
+                discovered_chat_id = self.get_telegram_chat_id()
+                if not discovered_chat_id:
+                    logger.error("⚠️ TELEGRAM_CHAT_ID não definido e não foi possível descobrir automaticamente")
+                    logger.info("💡 Envie uma mensagem para o bot e defina TELEGRAM_CHAT_ID")
                     return False
-                chat_id = telegram_config['chat_id']
+                chat_id = discovered_chat_id
             
             # Adiciona emojis e formatação para Telegram
             telegram_message = f"🏨 *Monitor StayCharlie*\n\n{message}"

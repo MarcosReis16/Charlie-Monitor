@@ -12,8 +12,8 @@ def test_telegram_config():
     """Testa configuração do Telegram"""
     print("🔍 Testando configuração do Telegram...")
     
-    bot_token = os.getenv('TELEGRAM_BOT_TOKEN', '8388369011:AAFPU0ouX2RMHmwLZ5OhlHl8iWP1zPTkWKI')
-    chat_id = os.getenv('TELEGRAM_CHAT_ID', '7665729772')
+    bot_token = os.getenv('TELEGRAM_BOT_TOKEN')
+    chat_id = os.getenv('TELEGRAM_CHAT_ID')
     
     if not bot_token or not chat_id:
         print("❌ TELEGRAM_BOT_TOKEN ou TELEGRAM_CHAT_ID não definidos")
@@ -72,8 +72,8 @@ def test_environment_vars():
     print("\n🔍 Verificando variáveis de ambiente...")
     
     required_vars = {
-        'TELEGRAM_BOT_TOKEN': os.getenv('TELEGRAM_BOT_TOKEN', '8388369011:AAFPU0ouX2RMHmwLZ5OhlHl8iWP1zPTkWKI'),
-        'TELEGRAM_CHAT_ID': os.getenv('TELEGRAM_CHAT_ID', '7665729772'),
+        'TELEGRAM_BOT_TOKEN': os.getenv('TELEGRAM_BOT_TOKEN'),
+        'TELEGRAM_CHAT_ID': os.getenv('TELEGRAM_CHAT_ID'),
         'MONITOR_URL': os.getenv('MONITOR_URL', 'https://www.staycharlie.com.br/charlie-nik-pinheiros?city=SP&start_date=2025-09-08&end_date=2025-09-12&guests=1'),
         'CHECK_INTERVAL_MINUTES': os.getenv('CHECK_INTERVAL_MINUTES', '30'),
         'PRICE_THRESHOLD_PERCENT': os.getenv('PRICE_THRESHOLD_PERCENT', '5.0'),
