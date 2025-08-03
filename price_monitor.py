@@ -24,6 +24,10 @@ try:
 except ImportError:
     SELENIUM_AVAILABLE = False
 
+# Threading para busca assíncrona
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+
 # Configuração de logging
 logging.basicConfig(
     level=logging.DEBUG,
@@ -329,6 +333,21 @@ class StayCharliePriceMonitor:
             with open('debug_page_rendered.html', 'w', encoding='utf-8') as f:
                 f.write(rendered_html)
             logger.info("HTML renderizado salvo em debug_page_rendered.html")
+            
+            # Verifica se há indicação de indisponibilidade
+            unavailable_patterns = [
+                r'indispon[ií]vel\s+nestas?\s+datas?',
+                r'indispon[ií]vel',
+                r'n[ãa]o\s+dispon[ií]vel',
+                r'sem\s+disponibilidade',
+                r'lotado',
+                r'esgotado'
+            ]
+            
+            for pattern in unavailable_patterns:
+                if re.search(pattern, page_text, re.IGNORECASE):
+                    logger.warning("❌ Unidade está indisponível para as datas selecionadas")
+                    return 'unavailable'
             
             # Busca por padrões de preço no texto completo
             price_patterns = [
@@ -778,12 +797,12 @@ Para testar, use: `python price_monitor.py --test-telegram`
 
         if price_info['night_price']:
             price_details = f"""
-📅 Diária: R$ {price_info['night_price']:.2f} → R$ {price_info['night_price_discounted']:.2f} (com cupom interno Nubank {discount_pct}%)
-📊 Total: R$ {price_info['total_price']:.2f} → R$ {current_total_discounted:.2f} (com cupom interno Nubank {discount_pct}%)
+📅 Diária: R$ {price_info['night_price']:.2f} → R$ {price_info['night_price_discounted']:.2f} (com {discount_pct}% desconto)
+📊 Total: R$ {price_info['total_price']:.2f} → R$ {current_total_discounted:.2f} (com {discount_pct}% desconto)
             """
         else:
             price_details = f"""
-📊 Total: R$ {price_info['total_price']:.2f} → R$ {current_total_discounted:.2f} (com cupom interno Nubank {discount_pct}%)
+📊 Total: R$ {price_info['total_price']:.2f} → R$ {current_total_discounted:.2f} (com {discount_pct}% desconto)
             """
         
         # ✅ SEMPRE envia notificação
@@ -823,33 +842,144 @@ Para testar, use: `python price_monitor.py --test-telegram`
         except:
             pass
 
-    def run_once(self):
-        """Executa uma verificação para todas as unidades habilitadas"""
-        all_success = True
+    def send_unavailable_notification(self, unit_name, url):
+        """Envia notificação quando uma unidade está indisponível"""
+        start_date = self.config['monitoring_settings']['start_date']
+        end_date = self.config['monitoring_settings']['end_date']
         
-        for unit in self.units:
-            unit_name = unit.get('name', 'Unknown')
-            unit_slug = unit.get('slug', '')
+        message = f"""❌ *INDISPONÍVEL*
+
+🏨 *{unit_name}*
+
+📅 *Período:* {start_date} até {end_date}
+
+😔 Esta unidade está indisponível para as datas solicitadas.
+
+🔗 *Link:* {url}
+
+⏰ *Verificado em:* {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+        """
+        
+        logger.info(f"📱 Enviando notificação de indisponibilidade para {unit_name}")
+        
+        # Envia notificação via Telegram
+        if self.config['telegram_notifications']['enabled']:
+            success = self.send_telegram_notification(message.strip())
+            if success:
+                logger.info("✅ Notificação de indisponibilidade enviada com sucesso")
+            else:
+                logger.error("❌ Falha ao enviar notificação de indisponibilidade")
+        
+        # Mostra notificação no sistema (macOS)
+        try:
+            os.system(f'''osascript -e 'display notification "❌ {unit_name} indisponível para {start_date} - {end_date}" with title "StayCharlie Monitor"' ''')
+        except:
+            pass
+
+    def process_single_unit(self, unit):
+        """Processa uma única unidade e retorna o resultado"""
+        unit_name = unit.get('name', 'Unknown')
+        unit_slug = unit.get('slug', '')
+        
+        if not unit_slug:
+            logger.warning(f"Unidade {unit_name} não tem slug definido, pulando...")
+            return {'unit': unit_name, 'success': False, 'reason': 'no_slug'}
             
-            if not unit_slug:
-                logger.warning(f"Unidade {unit_name} não tem slug definido, pulando...")
-                continue
-                
-            logger.info(f"🏠 Verificando preços para: {unit_name}")
-            
+        logger.info(f"🏠 Verificando preços para: {unit_name}")
+        
+        try:
             url = self.build_url(unit_slug)
             price_info = self.fetch_price(url)
             
-            if price_info is not None:
+            if price_info == 'unavailable':
+                # Unidade indisponível para as datas selecionadas
+                logger.warning(f"❌ {unit_name} está indisponível para as datas selecionadas")
+                self.send_unavailable_notification(unit_name, url)
+                return {'unit': unit_name, 'success': True, 'result': 'unavailable', 'url': url}
+            elif price_info is not None:
                 # Adiciona informações da unidade
                 price_info['unit_name'] = unit_name
                 price_info['unit_slug'] = unit_slug
                 self.record_price(price_info, unit_slug)
+                return {'unit': unit_name, 'success': True, 'result': 'price_found', 'price_info': price_info}
             else:
-                all_success = False
                 logger.error(f"❌ Falha ao verificar preços para {unit_name}")
+                return {'unit': unit_name, 'success': False, 'reason': 'fetch_failed'}
+                
+        except Exception as e:
+            logger.error(f"❌ Erro ao processar {unit_name}: {e}")
+            return {'unit': unit_name, 'success': False, 'reason': f'exception: {e}'}
+
+    def run_once_sequential(self):
+        """Executa verificação sequencial (método original)"""
+        all_success = True
+        
+        for unit in self.units:
+            result = self.process_single_unit(unit)
+            if not result['success']:
+                all_success = False
         
         return all_success
+
+    def run_once_async(self):
+        """Executa uma verificação assíncrona para todas as unidades habilitadas"""
+        if not self.units:
+            logger.warning("Nenhuma unidade configurada para monitoramento")
+            return True
+        
+        start_time = time.time()
+        max_configured = self.config.get('max_concurrent_threads', 3)
+        max_workers = min(len(self.units), max_configured)
+        logger.info(f"🚀 Iniciando verificação assíncrona de {len(self.units)} unidade(s) usando {max_workers} thread(s)...")
+        
+        all_success = True
+        results = []
+        
+        # Processamento assíncrono usando ThreadPoolExecutor
+        
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submete todas as unidades para processamento paralelo
+            future_to_unit = {
+                executor.submit(self.process_single_unit, unit): unit 
+                for unit in self.units
+            }
+            
+            # Coleta os resultados conforme vão ficando prontos
+            for future in as_completed(future_to_unit):
+                unit = future_to_unit[future]
+                try:
+                    result = future.result()
+                    results.append(result)
+                    
+                    if not result['success']:
+                        all_success = False
+                        
+                except Exception as e:
+                    logger.error(f"❌ Erro inesperado ao processar {unit.get('name', 'Unknown')}: {e}")
+                    all_success = False
+        
+        # Log dos resultados
+        elapsed_time = time.time() - start_time
+        logger.info(f"⏱️ Verificação completada em {elapsed_time:.2f}s (sequencial levaria ~{len(self.units) * 15:.1f}s)")
+        
+        success_count = sum(1 for r in results if r['success'])
+        logger.info(f"📊 Resultados: {success_count}/{len(self.units)} unidades processadas com sucesso")
+        
+        return all_success
+
+    def run_once(self):
+        """Executa uma verificação (assíncrona por padrão, sequencial como fallback)"""
+        async_enabled = self.config.get('async_processing', True)
+        
+        if async_enabled:
+            try:
+                return self.run_once_async()
+            except Exception as e:
+                logger.warning(f"⚠️ Erro no processamento assíncrono, voltando ao sequencial: {e}")
+                return self.run_once_sequential()
+        else:
+            logger.info("🔄 Usando processamento sequencial")
+            return self.run_once_sequential()
 
     def run_monitor(self):
         """Executa o monitor em loop contínuo"""
@@ -985,7 +1115,7 @@ Unidades ativas:
 🟢⬇️ Exemplo - PREÇO DESCEU! 🟢⬇️
 💰 Preço: R$ 1.414,50 → R$ 1.060,88 
 📉 Queda de: 25.0%
-💡 Com cupom interno Nubank (25% desconto)
+💡 Com desconto aplicado
 
 ✅ Sistema agora envia notificações para TODA verificação!
 🎨 Cores: 🟢 Desceu | 🔴 Subiu | 🟡 Estável | 🆕 Primeiro

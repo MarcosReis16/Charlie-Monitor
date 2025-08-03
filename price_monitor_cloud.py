@@ -446,14 +446,14 @@ class StayCharliePriceMonitorCloud:
 📊 Total: R$ {price_info['total_price']:.2f} → R$ {price_info['total_price_discounted']:.2f}
 📊 {change_desc}
 
-💡 *Com cupom interno Nubank ({self.discount_percent}% desconto)*
+💡 *Com {self.discount_percent}% desconto aplicado*
 
 🔗 [Reservar agora]({url})
 
 ⏰ Verificado em: {current_time}
         """
         
-        logger.info(f"{log_msg} Preço atual: R$ {current:.2f} (com cupom interno Nubank)")
+        logger.info(f"{log_msg} Preço atual: R$ {current:.2f} (com desconto aplicado)")
         logger.info("📱 Enviando notificação no Telegram...")
         success = self.send_telegram_notification(message.strip())
         if success:
