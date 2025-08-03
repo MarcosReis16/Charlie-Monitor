@@ -69,7 +69,7 @@ class StayCharliePriceMonitorCloud:
         self.price_history = self.load_price_history()
         self.units = self.get_enabled_units()
         
-        logger.info("🚀 StayCharlie Monitor Cloud iniciado")
+        logger.info("🚀 StayCharlie Monitor Cloud iniciado - v3.0")
         enabled_units = [unit['name'] for unit in self.units]
         logger.info(f"🏠 Monitorando {len(enabled_units)} unidade(s):")
         for unit in self.units:
