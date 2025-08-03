@@ -69,7 +69,7 @@ class StayCharliePriceMonitorCloud:
         self.price_history = self.load_price_history()
         self.units = self.get_enabled_units()
         
-        logger.info("🚀 StayCharlie Monitor Cloud iniciado - VERSÃO 2.0 (COM DEBUG + TIMEZONE + SEM NUBANK)")
+        logger.info("🚀 StayCharlie Monitor Cloud iniciado")
         enabled_units = [unit['name'] for unit in self.units]
         logger.info(f"🏠 Monitorando {len(enabled_units)} unidade(s):")
         for unit in self.units:
@@ -288,12 +288,7 @@ class StayCharliePriceMonitorCloud:
                 matches = re.findall(pattern, html_content, re.IGNORECASE)
                 daily_prices.extend(matches)
             
-            # DEBUG: Log do que foi encontrado
-            logger.info(f"🔍 DEBUG - Preços com 'noite' encontrados: {daily_prices}")
-            
-            # DEBUG: Procurar todas as ocorrências de "noite" no HTML
-            noite_contexts = re.findall(r'.{0,50}noite.{0,50}', html_content, re.IGNORECASE)
-            logger.info(f"🔍 DEBUG - Contextos com 'noite': {noite_contexts[:3]}")  # Primeiros 3
+
             
             # Buscar todos os preços
             all_prices = []
@@ -301,8 +296,7 @@ class StayCharliePriceMonitorCloud:
                 matches = re.findall(pattern, html_content)
                 all_prices.extend(matches)
             
-            # DEBUG: Log de todos os preços encontrados
-            logger.info(f"🔍 DEBUG - Todos os preços encontrados: {all_prices[:10]}")  # Primeiros 10
+
             
             # Função helper para converter preços brasileiros
             def convert_brazilian_price(price_str):
@@ -348,9 +342,7 @@ class StayCharliePriceMonitorCloud:
             except:
                 nights = 4  # Fallback padrão
             
-            # DEBUG: Log dos preços processados
-            logger.info(f"🔍 DEBUG - Preços da diária válidos: {valid_daily_prices}")
-            logger.info(f"🔍 DEBUG - Todos os preços válidos: {valid_all_prices}")
+
             
             # Lógica inteligente usando preços da diária quando disponível
             if valid_daily_prices and valid_all_prices:
