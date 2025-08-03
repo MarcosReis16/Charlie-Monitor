@@ -11,6 +11,7 @@ import logging
 import requests
 import argparse
 from datetime import datetime
+import pytz
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -38,6 +39,20 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+def get_brasilia_time():
+    """Retorna datetime no timezone de Brasília"""
+    brasilia_tz = pytz.timezone('America/Sao_Paulo')
+    return datetime.now(brasilia_tz)
+
+def calculate_nights(start_date_str, end_date_str):
+    """Calcula número de noites entre duas datas"""
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d')
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d')
+        return (end_date - start_date).days
+    except:
+        return 4  # Fallback padrão
 
 class StayCharliePriceMonitorCloud:
     def __init__(self):
@@ -286,20 +301,46 @@ class StayCharliePriceMonitorCloud:
             
             if valid_prices:
                 valid_prices.sort()
-                daily_price = min(valid_prices)  # Menor preço (provavelmente diária)
-                total_price = max(valid_prices)  # Maior preço (provavelmente total)
                 
-                logger.info(f"💰 Preços detectados:")
+                # Calcular número de noites da configuração
+                try:
+                    config_data = self.load_config()
+                    start_date = config_data['monitoring_settings']['start_date']
+                    end_date = config_data['monitoring_settings']['end_date']
+                    nights = calculate_nights(start_date, end_date)
+                except:
+                    nights = 4  # Fallback padrão
+                
+                # Lógica melhorada para identificar preços
+                if len(valid_prices) == 1:
+                    # Se há só um preço, assumir que é o total
+                    total_price = valid_prices[0]
+                    daily_price = total_price / nights
+                else:
+                    # Se há múltiplos preços, o maior é provavelmente o total
+                    total_price = max(valid_prices)
+                    daily_price = total_price / nights
+                    
+                    # Validar se há um preço que se aproxima da diária calculada
+                    calculated_daily = total_price / nights
+                    for price in valid_prices:
+                        # Se encontrar um preço próximo à diária calculada (±20%), usar esse
+                        if abs(price - calculated_daily) / calculated_daily <= 0.2:
+                            daily_price = price
+                            break
+                
+                logger.info(f"💰 Preços detectados ({nights} noites):")
                 logger.info(f"   📅 Diária: R$ {daily_price:.2f} → R$ {daily_price * (1 - self.discount_percent/100):.2f} (com {self.discount_percent}% desconto)")
                 logger.info(f"   📊 Total: R$ {total_price:.2f} → R$ {total_price * (1 - self.discount_percent/100):.2f} (com {self.discount_percent}% desconto)")
                 
                 return {
-                    'timestamp': datetime.now().isoformat(),
+                    'timestamp': get_brasilia_time().isoformat(),
                     'daily_price': daily_price,
                     'total_price': total_price,
                     'daily_price_discounted': daily_price * (1 - self.discount_percent/100),
                     'total_price_discounted': total_price * (1 - self.discount_percent/100),
-                    'discount_percent': self.discount_percent
+                    'discount_percent': self.discount_percent,
+                    'nights': nights
                 }
             else:
                 logger.info("ℹ️ Nenhum preço encontrado nesta verificação")
@@ -388,7 +429,7 @@ class StayCharliePriceMonitorCloud:
         url = self.build_url(unit_slug)
         
         record = {
-            'timestamp': datetime.now().isoformat(),
+                'timestamp': get_brasilia_time().isoformat(),
             'price_info': price_info,
             'url': url,
             'unit_name': unit_name,
@@ -441,7 +482,7 @@ class StayCharliePriceMonitorCloud:
             current = price_info['total_price_discounted']
         
         # ✅ SEMPRE envia notificação
-        current_time = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        current_time = get_brasilia_time().strftime('%d/%m/%Y %H:%M:%S')
         message = f"""
 {emoji} *{title}*
 
@@ -529,7 +570,7 @@ def main():
     
     if args.test:
         logger.info("🧪 Testando notificação do Telegram...")
-        current_time = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        current_time = get_brasilia_time().strftime('%d/%m/%Y %H:%M:%S')
         test_message = f"""
 🎉 *TESTE DE NOTIFICAÇÃO* 🎉
 
