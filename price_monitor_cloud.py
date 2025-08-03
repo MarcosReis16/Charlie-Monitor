@@ -69,7 +69,7 @@ class StayCharliePriceMonitorCloud:
         self.price_history = self.load_price_history()
         self.units = self.get_enabled_units()
         
-        logger.info("🚀 StayCharlie Monitor Cloud iniciado")
+        logger.info("🚀 StayCharlie Monitor Cloud iniciado - VERSÃO 2.0 (COM DEBUG + TIMEZONE + SEM NUBANK)")
         enabled_units = [unit['name'] for unit in self.units]
         logger.info(f"🏠 Monitorando {len(enabled_units)} unidade(s):")
         for unit in self.units:
@@ -624,8 +624,8 @@ def main():
 Hospedagem StayCharlie - Pinheiros
 Este é um teste para verificar se as notificações estão funcionando!
 
-📅 Diária: R$ 312,37 → R$ 234,28 (com 25% cupom)
-📊 Total: R$ 1.414,50 → R$ 1.060,88 (com 25% cupom)
+📅 Diária: R$ 312,37 → R$ 234,28 (com 25% desconto)
+📊 Total: R$ 1.414,50 → R$ 1.060,88 (com 25% desconto)
 
 🔗 [Link da hospedagem](https://www.staycharlie.com.br)
 
