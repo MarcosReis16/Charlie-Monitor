@@ -267,20 +267,35 @@ class StayCharliePriceMonitorCloud:
                 f.write(html_content)
             
             # Buscar preços no HTML renderizado
-            price_patterns = [
+            # Primeiro, procurar especificamente por preços de diária (com "noite")
+            daily_price_patterns = [
+                r'R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2})\s*(?:/\s*)?noite',  # R$ 1.234,56 / noite
+                r'(\d{1,3}(?:\.\d{3})*,\d{2})\s*(?:/\s*)?noite',        # 1.234,56 noite
+                r'R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2}).*?noite',           # R$ 1.234,56 [qualquer coisa] noite
+                r'(\d{1,3}(?:\.\d{3})*,\d{2}).*?noite',                 # 1.234,56 [qualquer coisa] noite
+            ]
+            
+            # Procurar por todos os preços (para pegar o total)
+            all_price_patterns = [
                 r'R\$\s*(\d{1,3}(?:\.\d{3})*,\d{2})',  # R$ 1.234,56
                 r'(\d{1,3}(?:\.\d{3})*,\d{2})',        # 1.234,56
                 r'(\d{1,3}(?:,\d{3})*\.\d{2})',        # 1,234.56
             ]
             
+            # Buscar preços da diária primeiro
+            daily_prices = []
+            for pattern in daily_price_patterns:
+                matches = re.findall(pattern, html_content, re.IGNORECASE)
+                daily_prices.extend(matches)
+            
+            # Buscar todos os preços
             all_prices = []
-            for pattern in price_patterns:
+            for pattern in all_price_patterns:
                 matches = re.findall(pattern, html_content)
                 all_prices.extend(matches)
             
-            # Filtrar preços válidos (acima de R$ 100)
-            valid_prices = []
-            for price_str in all_prices:
+            # Função helper para converter preços brasileiros
+            def convert_brazilian_price(price_str):
                 try:
                     # Normalizar formato brasileiro (vírgula para ponto)
                     if ',' in price_str and '.' in price_str:
@@ -295,56 +310,74 @@ class StayCharliePriceMonitorCloud:
                     
                     price_value = float(price_clean)
                     if 100 <= price_value <= 10000:  # Filtro de preços razoáveis
-                        valid_prices.append(price_value)
+                        return price_value
                 except ValueError:
-                    continue
+                    pass
+                return None
             
-            if valid_prices:
-                valid_prices.sort()
+            # Processar preços da diária (mais precisos)
+            valid_daily_prices = []
+            for price_str in daily_prices:
+                converted = convert_brazilian_price(price_str)
+                if converted:
+                    valid_daily_prices.append(converted)
+            
+            # Processar todos os preços (para pegar o total)
+            valid_all_prices = []
+            for price_str in all_prices:
+                converted = convert_brazilian_price(price_str)
+                if converted:
+                    valid_all_prices.append(converted)
+            
+            # Calcular número de noites da configuração
+            try:
+                config_data = self.load_config()
+                start_date = config_data['monitoring_settings']['start_date']
+                end_date = config_data['monitoring_settings']['end_date']
+                nights = calculate_nights(start_date, end_date)
+            except:
+                nights = 4  # Fallback padrão
+            
+            # Lógica inteligente usando preços da diária quando disponível
+            if valid_daily_prices and valid_all_prices:
+                # Temos preços específicos da diária!
+                daily_price = valid_daily_prices[0]  # Usar o primeiro preço encontrado com "noite"
                 
-                # Calcular número de noites da configuração
-                try:
-                    config_data = self.load_config()
-                    start_date = config_data['monitoring_settings']['start_date']
-                    end_date = config_data['monitoring_settings']['end_date']
-                    nights = calculate_nights(start_date, end_date)
-                except:
-                    nights = 4  # Fallback padrão
+                # Para o total, pegar o maior preço (excluindo se for muito próximo da diária)
+                valid_all_prices.sort()
+                total_price = max(valid_all_prices)
                 
-                # Lógica melhorada para identificar preços
-                if len(valid_prices) == 1:
-                    # Se há só um preço, assumir que é o total
-                    total_price = valid_prices[0]
-                    daily_price = total_price / nights
-                else:
-                    # Se há múltiplos preços, o maior é provavelmente o total
-                    total_price = max(valid_prices)
-                    daily_price = total_price / nights
+                # Se o total for muito próximo da diária, calcular total = diária × noites
+                if abs(total_price - daily_price) / daily_price <= 0.1:
+                    total_price = daily_price * nights
                     
-                    # Validar se há um preço que se aproxima da diária calculada
-                    calculated_daily = total_price / nights
-                    for price in valid_prices:
-                        # Se encontrar um preço próximo à diária calculada (±20%), usar esse
-                        if abs(price - calculated_daily) / calculated_daily <= 0.2:
-                            daily_price = price
-                            break
+                logger.info(f"💰 Preços detectados ({nights} noites) - DIÁRIA ESPECÍFICA:")
                 
-                logger.info(f"💰 Preços detectados ({nights} noites):")
-                logger.info(f"   📅 Diária: R$ {daily_price:.2f} → R$ {daily_price * (1 - self.discount_percent/100):.2f} (com {self.discount_percent}% desconto)")
-                logger.info(f"   📊 Total: R$ {total_price:.2f} → R$ {total_price * (1 - self.discount_percent/100):.2f} (com {self.discount_percent}% desconto)")
+            elif valid_all_prices:
+                # Fallback para lógica antiga se não encontrar preço da diária
+                valid_all_prices.sort()
+                total_price = max(valid_all_prices)
+                daily_price = total_price / nights
                 
-                return {
-                    'timestamp': get_brasilia_time().isoformat(),
-                    'daily_price': daily_price,
-                    'total_price': total_price,
-                    'daily_price_discounted': daily_price * (1 - self.discount_percent/100),
-                    'total_price_discounted': total_price * (1 - self.discount_percent/100),
-                    'discount_percent': self.discount_percent,
-                    'nights': nights
-                }
+                logger.info(f"💰 Preços detectados ({nights} noites) - CALCULADO:")
+                
             else:
                 logger.info("ℹ️ Nenhum preço encontrado nesta verificação")
                 return None
+            
+            # Logs de preços encontrados
+            logger.info(f"   📅 Diária: R$ {daily_price:.2f} → R$ {daily_price * (1 - self.discount_percent/100):.2f} (com {self.discount_percent}% desconto)")
+            logger.info(f"   📊 Total: R$ {total_price:.2f} → R$ {total_price * (1 - self.discount_percent/100):.2f} (com {self.discount_percent}% desconto)")
+            
+            return {
+                'timestamp': get_brasilia_time().isoformat(),
+                'daily_price': daily_price,
+                'total_price': total_price,
+                'daily_price_discounted': daily_price * (1 - self.discount_percent/100),
+                'total_price_discounted': total_price * (1 - self.discount_percent/100),
+                'discount_percent': self.discount_percent,
+                'nights': nights
+            }
                 
         except Exception as e:
             logger.error(f"❌ Erro ao buscar preços: {e}")
