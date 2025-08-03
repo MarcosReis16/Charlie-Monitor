@@ -12,8 +12,8 @@ Instruções para hospedar o monitor gratuitamente em diferentes plataformas.
 ## 🎯 Variáveis de Ambiente Necessárias
 
 ```env
-TELEGRAM_BOT_TOKEN=8388369011:AAFPU0ouX2RMHmwLZ5OhlHl8iWP1zPTkWKI
-TELEGRAM_CHAT_ID=7665729772
+TELEGRAM_BOT_TOKEN=SEU_TOKEN_DO_BOT_AQUI
+TELEGRAM_CHAT_ID=SEU_CHAT_ID_AQUI
 MONITOR_URL=https://www.staycharlie.com.br/charlie-nik-pinheiros?city=SP&start_date=2025-09-08&end_date=2025-09-12&guests=1
 CHECK_INTERVAL_MINUTES=30
 PRICE_THRESHOLD_PERCENT=0.0
@@ -128,8 +128,8 @@ DISCOUNT_PERCENT=25.0
 
 4. **Configurar secrets:**
    ```bash
-   fly secrets set TELEGRAM_BOT_TOKEN=8388369011:AAFPU0ouX2RMHmwLZ5OhlHl8iWP1zPTkWKI
-   fly secrets set TELEGRAM_CHAT_ID=7665729772
+   fly secrets set TELEGRAM_BOT_TOKEN=SEU_TOKEN_DO_BOT_AQUI
+   fly secrets set TELEGRAM_CHAT_ID=SEU_CHAT_ID_AQUI
    ```
 
 5. **Deploy:**
@@ -161,8 +161,8 @@ DISCOUNT_PERCENT=25.0
 
 3. **Configurar variáveis:**
    ```bash
-   heroku config:set TELEGRAM_BOT_TOKEN=8388369011:AAFPU0ouX2RMHmwLZ5OhlHl8iWP1zPTkWKI
-   heroku config:set TELEGRAM_CHAT_ID=7665729772
+   heroku config:set TELEGRAM_BOT_TOKEN=SEU_TOKEN_DO_BOT_AQUI
+   heroku config:set TELEGRAM_CHAT_ID=SEU_CHAT_ID_AQUI
    heroku config:set MONITOR_URL="https://www.staycharlie.com.br/charlie-nik-pinheiros?city=SP&start_date=2025-09-08&end_date=2025-09-12&guests=1"
    heroku config:set CHECK_INTERVAL_MINUTES=30
    heroku config:set PRICE_THRESHOLD_PERCENT=0.0
