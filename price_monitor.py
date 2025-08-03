@@ -665,6 +665,34 @@ Para testar, use: `python price_monitor.py --test-telegram`
                 
         return False, 0, 'no_change'
 
+    def log_price_check(self, unit_name, unit_slug, price_info, current_price, last_price):
+        """Registra log detalhado de cada verificação de preço"""
+        try:
+            log_file = 'price_checks.log'
+            timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
+            # Calcula variação
+            if last_price > 0:
+                change_percent = ((current_price - last_price) / last_price) * 100
+                change_status = "📈 SUBIU" if change_percent > 0.01 else "📉 DESCEU" if change_percent < -0.01 else "🟡 ESTÁVEL"
+                change_info = f"{change_percent:+.2f}%"
+            else:
+                change_status = "🆕 PRIMEIRO"
+                change_info = "---"
+            
+            # Monta linha do log
+            log_line = f"[{timestamp}] {unit_name} ({unit_slug}) | {change_status} | R$ {last_price:.2f} → R$ {current_price:.2f} ({change_info})\n"
+            
+            # Escreve no arquivo
+            with open(log_file, 'a', encoding='utf-8') as f:
+                f.write(log_line)
+            
+            # Log também no console (mais resumido)
+            logger.info(f"💰 {unit_name}: R$ {current_price:.2f} ({change_status})")
+            
+        except Exception as e:
+            logger.error(f"❌ Erro ao salvar log de verificação: {e}")
+
     def record_price(self, price_info, unit_slug=None):
         """Registra preço no histórico para uma unidade específica"""
         if isinstance(price_info, (int, float)):
@@ -711,68 +739,89 @@ Para testar, use: `python price_monitor.py --test-telegram`
         if last_price_info:
             last_total_discounted = last_price_info.get('total_price_discounted', last_record.get('price', 0))
         
-        # Só registra se houve mudança no preço ou se é o primeiro registro para esta unidade
-        if not unit_history or abs(current_total_discounted - last_total_discounted) > 0.01:
-            unit_history.append(record)
-            self.save_price_history()
-            
-            # Verifica se houve mudança significativa no preço
-            has_changed, change_percent, change_type = self.check_price_change(price_info, last_price_info)
-            
-            if has_changed:
-                # Formata mensagem detalhada
-                discount_pct = price_info['discount_percent']
-                
-                # Define emoji e título baseado no tipo de mudança
-                if change_type == 'drop':
-                    emoji = "📉"
-                    title = "PREÇO ABAIXOU!"
-                    change_desc = f"Queda de: {change_percent:.1f}%"
-                    log_msg = f"📉 PREÇO ABAIXOU {change_percent:.1f}%!"
-                else:
-                    emoji = "📈"
-                    title = "PREÇO SUBIU!"
-                    change_desc = f"Aumento de: {change_percent:.1f}%"
-                    log_msg = f"📈 PREÇO SUBIU {change_percent:.1f}%!"
-                
-                if price_info['night_price']:
-                    price_details = f"""
+        # ✅ SEMPRE registra (removendo check de mudança mínima)
+        unit_history.append(record)
+        self.save_price_history()
+        
+        # 📝 Log detalhado de verificação
+        self.log_price_check(unit_name, unit_slug, price_info, current_total_discounted, last_total_discounted)
+        
+        # ✅ SEMPRE verifica mudança para determinar tipo de notificação
+        has_changed, change_percent, change_type = self.check_price_change(price_info, last_price_info)
+        
+        # 🎨 Títulos coloridos baseados na mudança
+        discount_pct = price_info['discount_percent']
+        
+        if not last_price_info:
+            # Primeira verificação
+            emoji = "🆕"
+            title = "🟦 PRIMEIRO REGISTRO!"
+            change_desc = "Monitoramento iniciado"
+            log_msg = "🆕 Primeiro registro de preço!"
+        elif change_type == 'drop':
+            emoji = "🟢⬇️"
+            title = "🟢 PREÇO DESCEU!"
+            change_desc = f"Queda de: {change_percent:.1f}%"
+            log_msg = f"🟢⬇️ PREÇO DESCEU {change_percent:.1f}%!"
+        elif change_type == 'rise':
+            emoji = "🔴⬆️"
+            title = "🔴 PREÇO SUBIU!"
+            change_desc = f"Aumento de: {change_percent:.1f}%"
+            log_msg = f"🔴⬆️ PREÇO SUBIU {change_percent:.1f}%!"
+        else:
+            emoji = "🟡➡️"
+            title = "🟡 PREÇO ESTÁVEL"
+            change_desc = "Sem alteração"
+            log_msg = "🟡➡️ PREÇO MANTIDO"
+
+        logger.info(log_msg)
+
+        if price_info['night_price']:
+            price_details = f"""
 📅 Diária: R$ {price_info['night_price']:.2f} → R$ {price_info['night_price_discounted']:.2f} (com cupom interno Nubank {discount_pct}%)
 📊 Total: R$ {price_info['total_price']:.2f} → R$ {current_total_discounted:.2f} (com cupom interno Nubank {discount_pct}%)
-                    """
-                else:
-                    price_details = f"""
+            """
+        else:
+            price_details = f"""
 📊 Total: R$ {price_info['total_price']:.2f} → R$ {current_total_discounted:.2f} (com cupom interno Nubank {discount_pct}%)
-                    """
-                
-                message = f"""
+            """
+        
+        # ✅ SEMPRE envia notificação
+        message = f"""
 {emoji} {title} {emoji}
 
-{unit_name}
-Preço anterior (com cupom): R$ {last_total_discounted:.2f}
-Preço atual (com cupom): R$ {current_total_discounted:.2f}
-{change_desc}
+🏠 {unit_name}
+💰 Preço anterior: R$ {last_total_discounted:.2f}
+💰 Preço atual: R$ {current_total_discounted:.2f}
+📊 {change_desc}
 
 {price_details}
 
-Link: {url}
+🔗 Link: {url}
 
-Monitorado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
-                """
-                
-                logger.info(f"{log_msg} De R$ {last_total_discounted:.2f} para R$ {current_total_discounted:.2f} (com cupom interno Nubank)")
-                
-                # Envia notificação via Telegram
-                self.send_telegram_notification(message)
-                
-                # Mostra notificação no sistema (macOS)
-                try:
-                    if change_type == 'drop':
-                        os.system(f'''osascript -e 'display notification "Preço abaixou {change_percent:.1f}%! R$ {current_total_discounted:.2f} com cupom Nubank" with title "StayCharlie Monitor"' ''')
-                    else:
-                        os.system(f'''osascript -e 'display notification "Preço subiu {change_percent:.1f}%! R$ {current_total_discounted:.2f} com cupom Nubank" with title "StayCharlie Monitor"' ''')
-                except:
-                    pass
+⏰ Verificado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+        """
+        
+        logger.info(f"📱 Enviando notificação: {log_msg}")
+        
+        # Envia notificação via Telegram
+        if self.config['telegram_notifications']['enabled']:
+            success = self.send_telegram_notification(message.strip())
+            if success:
+                logger.info("✅ Notificação do Telegram enviada com sucesso")
+            else:
+                logger.error("❌ Falha ao enviar notificação do Telegram")
+        
+        # Mostra notificação no sistema (macOS)
+        try:
+            if change_type == 'drop':
+                os.system(f'''osascript -e 'display notification "🟢 Preço desceu {change_percent:.1f}%! R$ {current_total_discounted:.2f}" with title "StayCharlie Monitor"' ''')
+            elif change_type == 'rise':
+                os.system(f'''osascript -e 'display notification "🔴 Preço subiu {change_percent:.1f}%! R$ {current_total_discounted:.2f}" with title "StayCharlie Monitor"' ''')
+            else:
+                os.system(f'''osascript -e 'display notification "🟡 Preço verificado: R$ {current_total_discounted:.2f}" with title "StayCharlie Monitor"' ''')
+        except:
+            pass
 
     def run_once(self):
         """Executa uma verificação para todas as unidades habilitadas"""
@@ -920,16 +969,26 @@ def main():
     elif args.test_telegram:
         print("🧪 Testando notificação do Telegram...")
         current_time = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        # Lista das unidades monitoradas
+        units_list = [unit['name'] for unit in monitor.units]
+        units_text = " + ".join(units_list)
+        
         test_message = f"""
-📉 TESTE DE NOTIFICAÇÃO 📉
+🎉 TESTE DE NOTIFICAÇÃO 🎉
 
-Hospedagem StayCharlie - Pinheiros
-Este é um teste para verificar se as notificações estão funcionando!
+🏠 Sistema StayCharlie Monitor
+📊 Monitorando: {len(monitor.units)} unidade(s)
 
-📅 Diária: R$ 312,37 → R$ 234,28 (com cupom interno Nubank 25%)
-📊 Total: R$ 1.414,50 → R$ 1.060,88 (com cupom interno Nubank 25%)
+Unidades ativas:
+• {chr(10).join([f"• {unit['name']}" for unit in monitor.units])}
 
-Link: https://www.staycharlie.com.br/charlie-nik-pinheiros
+🟢⬇️ Exemplo - PREÇO DESCEU! 🟢⬇️
+💰 Preço: R$ 1.414,50 → R$ 1.060,88 
+📉 Queda de: 25.0%
+💡 Com cupom interno Nubank (25% desconto)
+
+✅ Sistema agora envia notificações para TODA verificação!
+🎨 Cores: 🟢 Desceu | 🔴 Subiu | 🟡 Estável | 🆕 Primeiro
 
 Testado em: {current_time}
         """
