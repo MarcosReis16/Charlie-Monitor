@@ -45,8 +45,6 @@ debug_page_rendered.html
 # macOS
 .DS_Store
 
-# Local config (use environment variables in cloud)
-price_monitor_config.json
 .env
 
 # Selenium drivers

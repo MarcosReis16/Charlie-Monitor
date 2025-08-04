@@ -1,0 +1,38 @@
+{
+    "check_interval_minutes": 30,
+    "async_processing": true,
+    "max_concurrent_threads": 3,
+    "monitoring_settings": {
+        "city": "SP",
+        "start_date": "2025-09-08",
+        "end_date": "2025-09-12",
+        "guests": 1
+    },
+    "units_to_monitor": [
+        {
+            "name": "Charlie Nik Pinheiros",
+            "slug": "charlie-nik-pinheiros",
+            "enabled": true
+        },
+        {
+            "name": "Smart Charlie Mobi Pinheiros",
+            "slug": "smart-charlie-mobi-pinheiros",
+            "enabled": true
+        },
+        {
+            "name": "Charlie Alves Guimarães Pinheiros",
+            "slug": "charlie-alves-guimaraes-pinheiros",
+            "enabled": true
+        },
+        {
+            "name": "House of Charlie Pinheiros",
+            "slug": "house-of-charlie-pinheiros",
+            "enabled": true
+        }
+    ],
+    "telegram_notifications": {
+        "enabled": true
+    },
+    "price_change_threshold_percent": 0.0,
+    "discount_percent": 25.0
+}
