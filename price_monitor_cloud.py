@@ -99,10 +99,21 @@ class StayCharliePriceMonitorCloud:
                 "end_date": "2025-09-12",
                 "guests": 1
             },
-            "units_to_monitor": []
+            "units_to_monitor": [
+                {
+                    "name": "Charlie Nik Pinheiros",
+                    "slug": "charlie-nik-pinheiros",
+                    "enabled": True
+                },
+                {
+                    "name": "Smart Charlie Mobi Pinheiros",
+                    "slug": "smart-charlie-mobi-pinheiros", 
+                    "enabled": True
+                }
+            ]
         }
         
-        # Override configurações de monitoramento com ENV vars se disponíveis
+        # Override com ENV vars se disponíveis
         city = os.getenv('MONITOR_CITY')
         start_date = os.getenv('MONITOR_START_DATE') 
         end_date = os.getenv('MONITOR_END_DATE')
@@ -116,52 +127,8 @@ class StayCharliePriceMonitorCloud:
             default_config['monitoring_settings']['end_date'] = end_date
         if guests:
             default_config['monitoring_settings']['guests'] = int(guests)
-        
-        # Carrega unidades dinamicamente das variáveis de ambiente
-        units = self.load_units_from_env()
-        if units:
-            default_config['units_to_monitor'] = units
-        else:
-            # Fallback para configuração padrão se não houver ENV vars
-            default_config['units_to_monitor'] = [
-                {
-                    "name": "Charlie Nik Pinheiros",
-                    "slug": "charlie-nik-pinheiros",
-                    "enabled": True
-                },
-                {
-                    "name": "Smart Charlie Mobi Pinheiros",
-                    "slug": "smart-charlie-mobi-pinheiros", 
-                    "enabled": True
-                }
-            ]
             
         return default_config
-    
-    def load_units_from_env(self):
-        """Carrega unidades das variáveis de ambiente UNIT_X_NAME, UNIT_X_SLUG, UNIT_X_ENABLED"""
-        units = []
-        
-        # Verifica até 10 unidades possíveis (UNIT_1_ até UNIT_10_)
-        for i in range(1, 11):
-            name = os.getenv(f'UNIT_{i}_NAME')
-            slug = os.getenv(f'UNIT_{i}_SLUG')
-            enabled = os.getenv(f'UNIT_{i}_ENABLED', 'true').lower() == 'true'
-            
-            if name and slug:
-                units.append({
-                    "name": name,
-                    "slug": slug,
-                    "enabled": enabled
-                })
-                logger.info(f"✅ Unidade {i} carregada: {name} ({slug}) - {'Ativada' if enabled else 'Desativada'}")
-        
-        if units:
-            logger.info(f"🏠 Total de {len(units)} unidade(s) carregada(s) das variáveis de ambiente")
-        else:
-            logger.warning("⚠️ Nenhuma unidade encontrada nas variáveis de ambiente, usando configuração padrão")
-            
-        return units
         
     def get_enabled_units(self):
         """Retorna lista de unidades habilitadas para monitoramento"""
