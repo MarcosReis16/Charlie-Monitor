@@ -91,8 +91,9 @@ class StayCharliePriceMonitorCloud:
         }
         
     def load_config(self):
-        """Carrega configuração priorizando ENV vars, com fallback para configuração padrão"""
+        """Carrega configuração do arquivo JSON primeiro, depois aplica ENV vars se disponíveis"""
         default_config = {
+            "check_interval_minutes": 30,
             "monitoring_settings": {
                 "city": "SP",
                 "start_date": "2025-09-08", 
@@ -110,25 +111,50 @@ class StayCharliePriceMonitorCloud:
                     "slug": "smart-charlie-mobi-pinheiros", 
                     "enabled": True
                 }
-            ]
+            ],
+            "telegram_notifications": {
+                "enabled": True
+            },
+            "price_change_threshold_percent": 0.0,
+            "discount_percent": 25.0
         }
         
-        # Override com ENV vars se disponíveis
+        # Carrega arquivo JSON se existir
+        config_file = 'price_monitor_config.json'
+        if os.path.exists(config_file):
+            try:
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    json_config = json.load(f)
+                # Mescla configuração do JSON com a padrão
+                config = {**default_config, **json_config}
+                logger.info(f"📄 Configuração carregada do arquivo {config_file}")
+            except Exception as e:
+                logger.error(f"❌ Erro ao carregar config JSON: {e}")
+                config = default_config
+        else:
+            logger.warning(f"⚠️ Arquivo {config_file} não encontrado, usando configuração padrão")
+            config = default_config
+        
+        # Override com ENV vars se disponíveis (prioridade maior)
         city = os.getenv('MONITOR_CITY')
         start_date = os.getenv('MONITOR_START_DATE') 
         end_date = os.getenv('MONITOR_END_DATE')
         guests = os.getenv('MONITOR_GUESTS')
         
         if city:
-            default_config['monitoring_settings']['city'] = city
+            config['monitoring_settings']['city'] = city
+            logger.info(f"🌍 Cidade sobrescrita por ENV var: {city}")
         if start_date:
-            default_config['monitoring_settings']['start_date'] = start_date
+            config['monitoring_settings']['start_date'] = start_date
+            logger.info(f"📅 Data início sobrescrita por ENV var: {start_date}")
         if end_date:
-            default_config['monitoring_settings']['end_date'] = end_date
+            config['monitoring_settings']['end_date'] = end_date
+            logger.info(f"📅 Data fim sobrescrita por ENV var: {end_date}")
         if guests:
-            default_config['monitoring_settings']['guests'] = int(guests)
+            config['monitoring_settings']['guests'] = int(guests)
+            logger.info(f"👥 Hóspedes sobrescrito por ENV var: {guests}")
             
-        return default_config
+        return config
         
     def get_enabled_units(self):
         """Retorna lista de unidades habilitadas para monitoramento"""
