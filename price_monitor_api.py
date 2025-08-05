@@ -161,10 +161,10 @@ class StayCharliePriceMonitorAPI:
             prices = availability_data.get('prices', {})
             available_units = availability_data.get('available_units', 0)
             
-            # Preços da API (em centavos, precisa dividir por 100)
+            # Preços da API (já vêm no formato correto como strings)
             daily_rate = float(prices.get('daily_rate', 0))
-            total_rate = float(prices.get('total_rate', 0)) / 100  # API retorna em centavos
-            total_without_fees = float(prices.get('total_rate_without_fees', 0)) / 100
+            total_rate = float(prices.get('total_rate', 0))
+            total_without_fees = float(prices.get('total_rate_without_fees', 0))
             
             # Taxas extras
             extra_rates = prices.get('extra_rates', [])
@@ -189,7 +189,7 @@ class StayCharliePriceMonitorAPI:
             # Aplica desconto personalizado se configurado
             discount = self.discount_percent / 100
             total_discounted = total_rate * (1 - discount) if discount > 0 else total_rate
-            daily_discounted = total_discounted / nights if nights > 0 else total_discounted
+            daily_discounted = daily_rate * (1 - discount) if discount > 0 else daily_rate
             
             price_info = {
                 'property_id': property_id,
