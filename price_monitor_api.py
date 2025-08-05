@@ -151,15 +151,34 @@ class StayCharliePriceMonitorAPI:
                 logger.warning(f"🚫 Unidade {property_id} indisponível (resposta vazia)")
                 return None
                 
-            # Extrai informações de preço
+            # Extrai informações detalhadas da API
             availability_data = data['data'][0] if data['data'] else None
             if not availability_data:
                 return None
+            
+            # Dados detalhados da API
+            room_type = availability_data.get('room_type_name', 'N/A')
+            prices = availability_data.get('prices', {})
+            available_units = availability_data.get('available_units', 0)
+            
+            # Preços da API (em centavos, precisa dividir por 100)
+            daily_rate = float(prices.get('daily_rate', 0))
+            total_rate = float(prices.get('total_rate', 0)) / 100  # API retorna em centavos
+            total_without_fees = float(prices.get('total_rate_without_fees', 0)) / 100
+            
+            # Taxas extras
+            extra_rates = prices.get('extra_rates', [])
+            cleaning_fee = 0
+            other_fees = []
+            
+            for fee in extra_rates:
+                fee_name = fee.get('name', '')
+                fee_value = float(fee.get('value_float', 0))
                 
-            # Calcula preços
-            base_price = float(availability_data.get('price', 0))
-            discount = self.discount_percent / 100
-            discounted_price = base_price * (1 - discount)
+                if 'limpeza' in fee_name.lower():
+                    cleaning_fee = fee_value
+                else:
+                    other_fees.append({'name': fee_name, 'value': fee_value})
             
             # Calcula noites
             from datetime import datetime
@@ -167,22 +186,33 @@ class StayCharliePriceMonitorAPI:
             end = datetime.strptime(settings['end_date'], '%Y-%m-%d')
             nights = (end - start).days
             
-            total_price = base_price * nights
-            total_discounted = discounted_price * nights
+            # Aplica desconto personalizado se configurado
+            discount = self.discount_percent / 100
+            total_discounted = total_rate * (1 - discount) if discount > 0 else total_rate
+            daily_discounted = total_discounted / nights if nights > 0 else total_discounted
             
             price_info = {
                 'property_id': property_id,
-                'night_price': base_price,
-                'night_price_discounted': discounted_price,
-                'total_price': total_price,
-                'total_price_discounted': total_discounted,
+                'room_type': room_type,
+                'daily_rate': daily_rate,
+                'total_rate': total_rate,
+                'total_without_fees': total_without_fees,
+                'cleaning_fee': cleaning_fee,
+                'other_fees': other_fees,
+                'available_units': available_units,
                 'nights': nights,
+                'total_discounted': total_discounted,
+                'daily_discounted': daily_discounted,
+                'discount_percent': self.discount_percent,
                 'available': True,
                 'timestamp': datetime.now().isoformat(),
-                'discount_percent': self.discount_percent
+                'city': settings['city'],
+                'guests': settings['guests'],
+                'checkin': settings['start_date'],
+                'checkout': settings['end_date']
             }
             
-            logger.info(f"💰 Preços obtidos para {property_id}: R$ {base_price:.2f}/noite → R$ {total_discounted:.2f} total")
+            logger.info(f"💰 Preços obtidos para {property_id}: R$ {daily_rate:.2f}/noite → R$ {total_rate:.2f} total ({available_units} unidades)")
             return price_info
             
         except requests.exceptions.RequestException as e:
@@ -245,8 +275,8 @@ class StayCharliePriceMonitorAPI:
         if last_price_info is None:
             return False, 0, 'no_change'
         
-        current_price = current_price_info['total_price_discounted']
-        last_price = last_price_info.get('total_price_discounted', 0)
+        current_price = current_price_info['total_discounted']
+        last_price = last_price_info.get('total_discounted', 0)
         
         if current_price != last_price:
             change_percent = abs(((current_price - last_price) / last_price) * 100) if last_price > 0 else 0
@@ -261,33 +291,97 @@ class StayCharliePriceMonitorAPI:
         return False, 0, 'no_change'
     
     def notify_price_change(self, unit_name, property_id, price_info, change_type, change_percent):
-        """Envia notificação de mudança de preço"""
-        current_total = price_info['total_price_discounted']
+        """Envia notificação detalhada com todos os dados da API"""
+        current_total = price_info['total_discounted']
         
         if change_type == 'drop':
             emoji = "🟢⬇️"
             title = f"PREÇO DESCEU {change_percent:.1f}%!"
+            status_icon = "📉"
         elif change_type == 'rise':
             emoji = "🔴⬆️"
             title = f"PREÇO SUBIU {change_percent:.1f}%!"
+            status_icon = "📈"
         else:
             emoji = "🟡➡️"
-            title = "PREÇO MANTIDO"
+            title = "PREÇO VERIFICADO"
+            status_icon = "📊"
+        
+        # Formata datas
+        checkin_formatted = datetime.strptime(price_info['checkin'], '%Y-%m-%d').strftime('%d/%m/%Y')
+        checkout_formatted = datetime.strptime(price_info['checkout'], '%Y-%m-%d').strftime('%d/%m/%Y')
+        
+        # Monta detalhes de taxas
+        fees_detail = ""
+        if price_info['cleaning_fee'] > 0:
+            fees_detail += f"\n🧹 Taxa de limpeza: R$ {price_info['cleaning_fee']:.2f}"
+        
+        for fee in price_info.get('other_fees', []):
+            fees_detail += f"\n💳 {fee['name']}: R$ {fee['value']:.2f}"
+        
+        # Desconto aplicado
+        discount_detail = ""
+        if price_info['discount_percent'] > 0:
+            original_total = price_info['total_rate']
+            savings = original_total - current_total
+            discount_detail = f"""
+🎯 *Desconto Aplicado:*
+💰 Preço original: R$ {original_total:.2f}
+✂️ Desconto {price_info['discount_percent']:.0f}%: -R$ {savings:.2f}
+💸 Você economiza: R$ {savings:.2f}"""
         
         message = f"""
-{emoji} {title}
+{emoji} *{title}*
 
-🏠 {unit_name}
-💰 Preço atual: R$ {current_total:.2f}
-📅 Diária: R$ {price_info['night_price_discounted']:.2f} ({price_info['nights']} noites)
-🎯 Desconto: {price_info['discount_percent']:.0f}%
+🏨 *{unit_name}*
+🏠 Tipo: {price_info['room_type']}
+🗓️ {checkin_formatted} → {checkout_formatted} ({price_info['nights']} noites)
+👥 {price_info['guests']} hóspede(s) • 📍 {price_info['city']}
 
-⏰ Verificado em: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}
+{status_icon} *PREÇOS DETALHADOS:*
+💰 Total final: *R$ {current_total:.2f}*
+📅 Diária: R$ {price_info['daily_discounted']:.2f}
+💵 Subtotal: R$ {price_info['total_without_fees']:.2f}{fees_detail}
+🏷️ Total com taxas: R$ {price_info['total_rate']:.2f}
+{discount_detail}
+
+🏢 *Disponibilidade:*
+✅ {price_info['available_units']} unidade(s) disponível(is)
+
+⏰ Verificado em: {datetime.now().strftime('%d/%m/%Y às %H:%M:%S')}
         """.strip()
         
-        logger.info(f"📱 Enviando notificação: {title}")
+        logger.info(f"📱 Enviando notificação detalhada: {title}")
         self.send_telegram_notification(message)
     
+    def notify_unavailable(self, unit_name, property_id, settings):
+        """Envia notificação quando unidade está indisponível"""
+        checkin_formatted = datetime.strptime(settings['start_date'], '%Y-%m-%d').strftime('%d/%m/%Y')
+        checkout_formatted = datetime.strptime(settings['end_date'], '%Y-%m-%d').strftime('%d/%m/%Y')
+        
+        from datetime import datetime
+        start = datetime.strptime(settings['start_date'], '%Y-%m-%d')
+        end = datetime.strptime(settings['end_date'], '%Y-%m-%d')
+        nights = (end - start).days
+        
+        message = f"""
+🚫 *UNIDADE INDISPONÍVEL*
+
+🏨 *{unit_name}*
+🗓️ {checkin_formatted} → {checkout_formatted} ({nights} noites)
+👥 {settings['guests']} hóspede(s) • 📍 {settings['city']}
+
+❌ *Status:* Não disponível para as datas selecionadas
+📊 Nenhuma unidade disponível no momento
+
+💡 *Dica:* Tente outras datas ou verifique novamente mais tarde
+
+⏰ Verificado em: {datetime.now().strftime('%d/%m/%Y às %H:%M:%S')}
+        """.strip()
+        
+        logger.info(f"📱 Enviando notificação de indisponibilidade")
+        self.send_telegram_notification(message)
+
     def monitor_unit(self, unit):
         """Monitora uma unidade específica"""
         unit_name = unit['name']
@@ -299,7 +393,10 @@ class StayCharliePriceMonitorAPI:
         price_info = self.fetch_price_api(property_id)
         
         if price_info is None:
-            logger.warning(f"⚠️ Não foi possível obter preços para {unit_name}")
+            logger.warning(f"⚠️ {unit_name} indisponível")
+            # Envia notificação de indisponibilidade
+            settings = self.config['monitoring_settings']
+            self.notify_unavailable(unit_name, property_id, settings)
             return
         
         # Compara com histórico
