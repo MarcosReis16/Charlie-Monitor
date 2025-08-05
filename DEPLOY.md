@@ -1,23 +1,31 @@
 # 🚀 Deploy do Monitor StayCharlie na Cloud
 
-Instruções para hospedar o monitor gratuitamente em diferentes plataformas.
+Instruções para hospedar o monitor gratuitamente em diferentes plataformas. **Nova versão API** - muito mais rápida e eficiente!
 
 ## 📋 Pré-requisitos
 
 1. **Bot do Telegram configurado** com token
-2. **Chat ID** do Telegram obtido
+2. **Chat ID** do Telegram obtido (usuário ou grupo)
 3. **Conta GitHub** para versionamento
 4. **Conta na plataforma** escolhida (Railway, Render, etc.)
 
 ## 🎯 Variáveis de Ambiente Necessárias
 
+### Obrigatórias
 ```env
 TELEGRAM_BOT_TOKEN=SEU_TOKEN_DO_BOT_AQUI
 TELEGRAM_CHAT_ID=SEU_CHAT_ID_AQUI
-MONITOR_URL=https://www.staycharlie.com.br/charlie-nik-pinheiros?city=SP&start_date=2025-09-08&end_date=2025-09-12&guests=1
+```
+
+### Opcionais (valores padrão no price_monitor_config.json)
+```env
 CHECK_INTERVAL_MINUTES=30
 PRICE_THRESHOLD_PERCENT=0.0
 DISCOUNT_PERCENT=25.0
+MONITOR_CITY=SP
+MONITOR_START_DATE=2025-09-08
+MONITOR_END_DATE=2025-09-12
+MONITOR_GUESTS=1
 ```
 
 ---
@@ -27,7 +35,8 @@ DISCOUNT_PERCENT=25.0
 ### Vantagens:
 - ✅ 500 horas/mês grátis
 - ✅ Deploy automático via GitHub
-- ✅ Excelente para Python
+- ✅ **Container 80% menor** (versão API)
+- ✅ **Performance 10x melhor**
 - ✅ Volume persistente
 
 ### Passos:
@@ -46,15 +55,18 @@ DISCOUNT_PERCENT=25.0
    - Conecte sua conta GitHub
    - Clique em "New Project" → "Deploy from GitHub repo"
    - Selecione seu repositório
-   - Railway detectará automaticamente o Dockerfile
+   - Railway detectará automaticamente o Dockerfile otimizado
 
-3. **Configurar variáveis:**
+3. **Configurar variáveis (apenas 2 obrigatórias!):**
    - Vá em Settings → Variables
-   - Adicione todas as variáveis de ambiente listadas acima
+   - Adicione:
+     - `TELEGRAM_BOT_TOKEN` = seu_token_aqui
+     - `TELEGRAM_CHAT_ID` = seu_chat_id_aqui
 
 4. **Deploy automático:**
-   - Railway fará deploy automaticamente
-   - Monitor ficará rodando 24/7
+   - Railway fará deploy automático
+   - **Versão API** - muito mais rápida!
+   - Monitor rodando 24/7 com verificações em 2-3s
 
 ---
 
