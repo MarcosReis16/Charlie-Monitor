@@ -186,23 +186,16 @@ class StayCharliePriceMonitorAPI:
             end = datetime.strptime(settings['end_date'], '%Y-%m-%d')
             nights = (end - start).days
             
-            # Aplica desconto personalizado se configurado
-            discount = self.discount_percent / 100
-            total_discounted = total_rate * (1 - discount) if discount > 0 else total_rate
-            daily_discounted = daily_rate * (1 - discount) if discount > 0 else daily_rate
-            
             price_info = {
                 'property_id': property_id,
                 'room_type': room_type,
-                'daily_rate': daily_rate,
-                'total_rate': total_rate,
-                'total_without_fees': total_without_fees,
+                'daily_rate': daily_rate,  # VALOR EXATO DA API
+                'total_rate': total_rate,  # VALOR EXATO DA API
+                'total_without_fees': total_without_fees,  # VALOR EXATO DA API
                 'cleaning_fee': cleaning_fee,
                 'other_fees': other_fees,
                 'available_units': available_units,
                 'nights': nights,
-                'total_discounted': total_discounted,
-                'daily_discounted': daily_discounted,
                 'discount_percent': self.discount_percent,
                 'available': True,
                 'timestamp': datetime.now().isoformat(),
@@ -275,8 +268,8 @@ class StayCharliePriceMonitorAPI:
         if last_price_info is None:
             return False, 0, 'no_change'
         
-        current_price = current_price_info['total_discounted']
-        last_price = last_price_info.get('total_discounted', 0)
+        current_price = current_price_info['total_rate']  # VALOR DIRETO DA API
+        last_price = last_price_info.get('total_rate', 0)
         
         if current_price != last_price:
             change_percent = abs(((current_price - last_price) / last_price) * 100) if last_price > 0 else 0
@@ -291,8 +284,7 @@ class StayCharliePriceMonitorAPI:
         return False, 0, 'no_change'
     
     def notify_price_change(self, unit_name, property_id, price_info, change_type, change_percent):
-        """Envia notificação detalhada com todos os dados da API"""
-        current_total = price_info['total_discounted']
+        """Envia notificação com valores EXATOS da API"""
         
         if change_type == 'drop':
             emoji = "🟢⬇️"
@@ -319,17 +311,6 @@ class StayCharliePriceMonitorAPI:
         for fee in price_info.get('other_fees', []):
             fees_detail += f"\n💳 {fee['name']}: R$ {fee['value']:.2f}"
         
-        # Desconto aplicado
-        discount_detail = ""
-        if price_info['discount_percent'] > 0:
-            original_total = price_info['total_rate']
-            savings = original_total - current_total
-            discount_detail = f"""
-🎯 *Desconto Aplicado:*
-💰 Preço original: R$ {original_total:.2f}
-✂️ Desconto {price_info['discount_percent']:.0f}%: -R$ {savings:.2f}
-💸 Você economiza: R$ {savings:.2f}"""
-        
         message = f"""
 {emoji} *{title}*
 
@@ -338,12 +319,10 @@ class StayCharliePriceMonitorAPI:
 🗓️ {checkin_formatted} → {checkout_formatted} ({price_info['nights']} noites)
 👥 {price_info['guests']} hóspede(s) • 📍 {price_info['city']}
 
-{status_icon} *PREÇOS DETALHADOS:*
-💰 Total final: *R$ {current_total:.2f}*
-📅 Diária: R$ {price_info['daily_discounted']:.2f}
+{status_icon} *PREÇOS DA API:*
+📅 Diária: R$ {price_info['daily_rate']:.2f}
 💵 Subtotal: R$ {price_info['total_without_fees']:.2f}{fees_detail}
-🏷️ Total com taxas: R$ {price_info['total_rate']:.2f}
-{discount_detail}
+💰 Total final: *R$ {price_info['total_rate']:.2f}*
 
 🏢 *Disponibilidade:*
 ✅ {price_info['available_units']} unidade(s) disponível(is)
@@ -351,7 +330,7 @@ class StayCharliePriceMonitorAPI:
 ⏰ Verificado em: {datetime.now().strftime('%d/%m/%Y às %H:%M:%S')}
         """.strip()
         
-        logger.info(f"📱 Enviando notificação detalhada: {title}")
+        logger.info(f"📱 Enviando notificação: {title}")
         self.send_telegram_notification(message)
     
     def notify_unavailable(self, unit_name, property_id, settings):
