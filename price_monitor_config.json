@@ -12,21 +12,25 @@
         {
             "name": "Charlie Nik Pinheiros",
             "slug": "charlie-nik-pinheiros",
+            "property_id": "310088",
             "enabled": true
         },
         {
             "name": "Smart Charlie Mobi Pinheiros",
             "slug": "smart-charlie-mobi-pinheiros",
+            "property_id": "256246",
             "enabled": true
         },
         {
             "name": "Charlie Alves Guimarães Pinheiros",
             "slug": "charlie-alves-guimaraes-pinheiros",
+            "property_id": "302911",
             "enabled": true
         },
         {
             "name": "House of Charlie Pinheiros",
             "slug": "house-of-charlie-pinheiros",
+            "property_id": "313510",
             "enabled": true
         }
     ],
