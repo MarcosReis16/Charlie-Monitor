@@ -102,22 +102,15 @@ O arquivo `price_monitor_config.json` permite configurar:
 
 ## 🏗️ Arquitetura
 
-### Versões Disponíveis
+### Versão Única
 
-1. **API** (`price_monitor_api.py`) - **⭐ RECOMENDADA**
-   - Usa API oficial do StayCharlie
-   - Performance otimizada (2-3s por verificação)
-   - Container Docker leve
-   - Dados mais precisos
-
-2. **Local** (`price_monitor.py`)
-   - Interface gráfica
-   - Configuração via arquivo JSON
-   - Notificações desktop + Telegram
-
-3. **Cloud Legacy** (`price_monitor_cloud.py`)
-   - Versão antiga com Selenium
-   - Mantida para compatibilidade
+**API** (`price_monitor_api.py`) - **Versão de Produção**
+- ✅ Usa API oficial do StayCharlie
+- ✅ Performance otimizada (2-3s por verificação)
+- ✅ Container Docker leve
+- ✅ Dados precisos e confiáveis
+- ✅ Deploy automático em Railway/Render
+- ✅ Timezone Brasília correto
 
 ## 📊 Funcionalidades
 
