@@ -57,7 +57,7 @@ cp env.example .env
 python price_monitor_api.py
 
 # Ou versão local com interface
-python price_monitor.py
+python price_monitor_api.py
 ```
 
 ## ⚙️ Configuração
@@ -163,13 +163,11 @@ O arquivo `price_monitor_config.json` permite configurar:
 
 ### Estrutura do Projeto
 ```
-├── price_monitor_api.py      # 🚀 Versão API (principal)
-├── price_monitor.py          # Versão local com GUI
-├── price_monitor_cloud.py    # Versão legacy (Selenium)
+├── price_monitor_api.py      # 🚀 Versão única de produção
 ├── price_monitor_config.json # Configurações + Property IDs
-├── requirements.txt          # Dependências locais
-├── requirements-deploy.txt   # Dependências otimizadas
-├── Dockerfile               # Container leve (sem Chrome)
+├── requirements.txt          # Dependências
+├── requirements-deploy.txt   # Dependências de deploy
+├── Dockerfile               # Container otimizado
 ├── railway.json            # Configuração Railway
 ├── render.yaml             # Configuração Render
 └── env.example             # Exemplo de variáveis

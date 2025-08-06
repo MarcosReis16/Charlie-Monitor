@@ -131,7 +131,7 @@ MONITOR_GUESTS=1
      DISCOUNT_PERCENT = "25.0"
    
    [processes]
-     worker = "python price_monitor_cloud.py"
+     worker = "python price_monitor_api.py"
    
    [[services]]
      internal_port = 8080
@@ -222,18 +222,18 @@ Após o deploy, você pode:
    ```bash
    # Railway/Render (via logs)
    # Fly.io
-   fly ssh console -C "python price_monitor_cloud.py --test"
+   fly ssh console -C "python price_monitor_api.py --test"
    # Heroku
-   heroku run python price_monitor_cloud.py --test
+   heroku run python price_monitor_api.py --test
    ```
 
 3. **Verificação única:**
    ```bash
    # Railway/Render (via logs)
    # Fly.io
-   fly ssh console -C "python price_monitor_cloud.py --once"
+   fly ssh console -C "python price_monitor_api.py --once"
    # Heroku
-   heroku run python price_monitor_cloud.py --once
+   heroku run python price_monitor_api.py --once
    ```
 
 ---
