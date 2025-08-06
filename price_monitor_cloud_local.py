@@ -11,6 +11,7 @@ import logging
 import requests
 import argparse
 from datetime import datetime
+import pytz
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
@@ -32,6 +33,11 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
+
+def get_brasilia_time():
+    """Retorna datetime no timezone de Brasília"""
+    brasilia_tz = pytz.timezone('America/Sao_Paulo')
+    return datetime.now(brasilia_tz)
 
 class StayCharliePriceMonitorCloud:
     def __init__(self):
@@ -288,7 +294,7 @@ class StayCharliePriceMonitorCloud:
                 logger.info(f"   📊 Total: R$ {total_price:.2f} → R$ {total_price * (1 - self.discount_percent/100):.2f} (com {self.discount_percent}% desconto)")
                 
                 return {
-                    'timestamp': datetime.now().isoformat(),
+                    'timestamp': get_brasilia_time().isoformat(),
                     'daily_price': daily_price,
                     'total_price': total_price,
                     'daily_price_discounted': daily_price * (1 - self.discount_percent/100),
@@ -382,7 +388,7 @@ class StayCharliePriceMonitorCloud:
         url = self.build_url(unit_slug)
         
         record = {
-            'timestamp': datetime.now().isoformat(),
+            'timestamp': get_brasilia_time().isoformat(),
             'price_info': price_info,
             'url': url,
             'unit_name': unit_name,
@@ -435,7 +441,7 @@ class StayCharliePriceMonitorCloud:
             current = price_info['total_price_discounted']
         
         # ✅ SEMPRE envia notificação
-        current_time = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        current_time = get_brasilia_time().strftime('%d/%m/%Y %H:%M:%S')
         message = f"""
 {emoji} *{title}*
 
@@ -523,7 +529,7 @@ def main():
     
     if args.test:
         logger.info("🧪 Testando notificação do Telegram...")
-        current_time = datetime.now().strftime('%d/%m/%Y %H:%M:%S')
+        current_time = get_brasilia_time().strftime('%d/%m/%Y %H:%M:%S')
         test_message = f"""
 🎉 *TESTE DE NOTIFICAÇÃO* 🎉
 
