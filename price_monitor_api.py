@@ -338,7 +338,6 @@ class StayCharliePriceMonitorAPI:
         checkin_formatted = datetime.strptime(settings['start_date'], '%Y-%m-%d').strftime('%d/%m/%Y')
         checkout_formatted = datetime.strptime(settings['end_date'], '%Y-%m-%d').strftime('%d/%m/%Y')
         
-        from datetime import datetime
         start = datetime.strptime(settings['start_date'], '%Y-%m-%d')
         end = datetime.strptime(settings['end_date'], '%Y-%m-%d')
         nights = (end - start).days
