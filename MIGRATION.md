@@ -1,6 +1,6 @@
-# 🚀 Migração para Versão API
+# 🚀 Migração para Versão Única API
 
-Guia para migrar da versão Selenium para a nova versão API.
+Guia de migração da versão Selenium (removida) para a versão única com API oficial do StayCharlie.
 
 ## ✨ Principais Melhorias
 
@@ -10,7 +10,8 @@ Guia para migrar da versão Selenium para a nova versão API.
 | **Container Size** | ~2GB (Chrome + deps) | ~200MB |
 | **Confiabilidade** | Média (JS, loading) | Alta (API direta) |
 | **Recursos** | Alto (CPU/RAM) | Mínimo |
-| **Dependências** | Chrome, ChromeDriver | Apenas requests |
+| **Dependências** | Chrome, ChromeDriver, selenium, beautifulsoup4 | Apenas requests + pytz |
+| **Timezone** | UTC (problemático) | Brasília (correto) |
 
 ## 🔄 Mudanças Principais
 
@@ -116,8 +117,9 @@ Para referência:
 - Teste com usuário primeiro
 
 ### Performance
-- Nova versão deve mostrar verificações em ~3s
-- Se estiver lento, verifique se está usando `price_monitor_api.py`
+- ✅ **Versão única** deve mostrar verificações em ~3s
+- ✅ **Apenas `price_monitor_api.py`** disponível (versão de produção)
+- ✅ **Timezone Brasília** corrigido automaticamente
 
 ## 📊 Monitoramento
 
@@ -143,11 +145,12 @@ python price_monitor_api.py --once
 
 Após a migração, você terá:
 
-- ⚡ **10x mais rápido** nas verificações
-- 💾 **80% menos uso de recursos**
-- 🎯 **Maior precisão** nos dados
-- 🛡️ **Maior confiabilidade**
-- 📱 **Notificações mais rápidas**
+- ⚡ **10x mais rápido** nas verificações (3s vs 30s+)
+- 💾 **80% menos uso de recursos** (sem Chrome/ChromeDriver)
+- 🎯 **Maior precisão** nos dados (API oficial vs scraping)
+- 🛡️ **Maior confiabilidade** (sem problemas de browser)
+- 📱 **Notificações com timezone correto** (Brasília)
+- 🧹 **Codebase limpo** - apenas uma versão de produção
 
 ---
 
@@ -160,4 +163,6 @@ Se encontrar problemas durante a migração:
 3. Teste localmente primeiro
 4. Verifique os logs do deploy
 
-A nova versão é **compatível com todas as configurações existentes** - apenas **muito mais eficiente**!
+A versão única API é **compatível com todas as configurações existentes** e **muito mais eficiente**!
+
+**🎯 Status atual: Projeto consolidado com apenas `price_monitor_api.py` funcionando em produção.**

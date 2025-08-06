@@ -1,17 +1,18 @@
 # 🏨 Monitor de Preços StayCharlie
 
-Monitor automatizado de preços dos apartamentos StayCharlie com notificações via Telegram. **Nova versão com API oficial** - 10x mais rápida e confiável!
+Monitor automatizado de preços dos apartamentos StayCharlie com notificações via Telegram. **Versão única com API oficial** - 10x mais rápida e confiável que web scraping!
 
 ## ✨ Características
 
-- 🚀 **API Oficial** - Consultas diretas sem web scraping
-- ⚡ **Super Rápido** - Verificações em 2-3 segundos (vs 30s+)
+- 🚀 **API Oficial** - Consultas diretas sem web scraping ou Selenium
+- ⚡ **Super Rápido** - Verificações em 2-3 segundos (vs 30s+ Selenium)
 - 📱 **Notificações Telegram** para grupos ou usuários
 - 📊 **Histórico de preços** com comparação automática
 - 🎯 **Múltiplas unidades** configuráveis via JSON
-- ☁️ **Deploy gratuito** em plataformas cloud
+- ☁️ **Deploy gratuito** em Railway, Render, Fly.io
 - 🔄 **Verificação contínua** com intervalos personalizáveis
-- 📦 **Container leve** - Docker otimizado (80% menor)
+- 📦 **Container leve** - Docker otimizado sem Chrome/ChromeDriver
+- 🕐 **Timezone correto** - Horários em Brasília
 
 ## 🚀 Deploy Rápido (Recomendado)
 
@@ -53,11 +54,14 @@ pip install -r requirements.txt
 cp env.example .env
 # Edite o arquivo .env com suas configurações
 
-# Execute versão API (recomendada)
+# Execute o monitor
 python price_monitor_api.py
 
-# Ou versão local com interface
-python price_monitor_api.py
+# Modo teste (verifica uma vez e para)
+python price_monitor_api.py --test
+
+# Verificação única (sem loop contínuo)
+python price_monitor_api.py --once
 ```
 
 ## ⚙️ Configuração
@@ -102,15 +106,17 @@ O arquivo `price_monitor_config.json` permite configurar:
 
 ## 🏗️ Arquitetura
 
-### Versão Única
+### Versão Única Consolidada
 
-**API** (`price_monitor_api.py`) - **Versão de Produção**
-- ✅ Usa API oficial do StayCharlie
-- ✅ Performance otimizada (2-3s por verificação)
-- ✅ Container Docker leve
-- ✅ Dados precisos e confiáveis
-- ✅ Deploy automático em Railway/Render
-- ✅ Timezone Brasília correto
+**`price_monitor_api.py`** - **Única versão de produção**
+- ✅ Usa API oficial do StayCharlie (`/api/availability`)
+- ✅ Performance otimizada (2-3s por verificação vs 30s+ Selenium)
+- ✅ Container Docker leve (sem Chrome/ChromeDriver)
+- ✅ Dados precisos e confiáveis direto da API
+- ✅ Deploy automático em Railway/Render/Fly.io
+- ✅ Timezone Brasília correto (`America/Sao_Paulo`)
+- ✅ Tratamento inteligente de unidades indisponíveis
+- ✅ Dependências mínimas: apenas `requests` e `pytz`
 
 ## 📊 Funcionalidades
 
@@ -121,24 +127,46 @@ O arquivo `price_monitor_config.json` permite configurar:
 - **🚫 Indisponível**: Detecta quando `{"data":[]}` na API
 
 ### API Integration
-- **Endpoint**: `/api/availability`
-- **Property IDs**: Configurados no JSON
-- **Detecção de disponibilidade**: Automática
-- **Dados precisos**: Direto da fonte oficial
+- **Endpoint**: `https://www.staycharlie.com.br/api/availability`
+- **Method**: `POST` com dados de checkin/checkout
+- **Property IDs**: Configurados no `price_monitor_config.json`
+- **Detecção de disponibilidade**: Automática via resposta `{"data":[]}`
+- **Dados precisos**: Direto da fonte oficial do StayCharlie
+- **Rate limiting**: Respeitoso com delays entre requests
 
 ## 🔔 Exemplo de Notificação
 
+### Preço Verificado
 ```
-🏨 Monitor StayCharlie API
+✅ PREÇO VERIFICADO
 
-🟢⬇️ PREÇO DESCEU 0.4%!
+🏨 Smart Charlie Mobi Pinheiros
+🏠 Tipo: Apartamento
+🗓️ 08/09/2025 → 12/09/2025 (4 noites)
+👥 1 hóspede(s) • 📍 São Paulo
 
-🏠 Smart Charlie Mobi Pinheiros
-💰 Preço atual: R$ 998.62
-📅 Diária: R$ 221.53 (4 noites)
-🎯 Desconto: 25%
+📊 PREÇOS DA API:
+📅 Diária: R$ 287.93
+💵 Subtotal: R$ 1301.75
+💰 Total final: R$ 1301.75
 
-⏰ Verificado em: 04/01/2025 09:37:52
+🏢 Disponibilidade:
+✅ 4 unidade(s) disponível(is)
+
+⏰ Verificado em: 06/08/2025 às 17:24:32
+```
+
+### Unidade Indisponível
+```
+🚫 UNIDADE INDISPONÍVEL
+
+🏨 Charlie Alves Guimarães Pinheiros
+🗓️ 08/09/2025 → 12/09/2025 (4 noites)
+👥 1 hóspede(s) • 📍 São Paulo
+
+ℹ️ Nenhuma unidade disponível para as datas selecionadas
+
+⏰ Verificado em: 06/08/2025 às 17:24:40
 ```
 
 ## 📱 Deploy em Plataformas
@@ -181,16 +209,24 @@ O arquivo `price_monitor_config.json` permite configurar:
 313510 - house-of-charlie-pinheiros
 ```
 
-### Logs
-- `price_monitor_api.log` - Logs da versão API
+### Logs e Dados
+- `price_monitor_api.log` - Logs detalhados com timestamp Brasília
 - `price_history.json` - Histórico de preços por property_id
+- `/app/data/` - Diretório de dados no container Docker
 
 ## 🚀 Performance Comparison
 
-| Método | Tempo/Verificação | Recursos | Confiabilidade |
-|--------|------------------|----------|----------------|
-| **API** | 2-3s | Mínimo | Alta ⭐ |
-| Selenium | 30-60s | Alto | Média |
+| Método | Tempo/Verificação | Recursos | Dependências | Confiabilidade |
+|--------|------------------|----------|--------------|----------------|
+| **API** | 2-3s | Mínimo | requests, pytz | Alta ⭐ |
+| Selenium (removido) | 30-60s | Alto | Chrome, ChromeDriver, selenium, beautifulsoup4 | Média |
+
+### Melhorias da Versão API
+- 🚀 **10x mais rápida** - De 30s para 3s por verificação
+- 📦 **Container 80% menor** - Sem Chrome/ChromeDriver
+- 🔧 **Dependências mínimas** - 2 pacotes vs 4+ anteriormente
+- 🛡️ **Mais confiável** - Sem problemas de browser/driver
+- 💰 **Menor custo de cloud** - Menos CPU e memória
 
 ## 🤝 Contribuição
 
