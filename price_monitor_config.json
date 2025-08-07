@@ -1,5 +1,5 @@
 {
-    "check_interval_minutes": 30,
+    "check_interval_minutes": 120,
     "async_processing": true,
     "max_concurrent_threads": 3,
     "monitoring_settings": {

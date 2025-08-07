@@ -30,7 +30,7 @@ TELEGRAM_BOT_TOKEN=seu_token_aqui
 TELEGRAM_CHAT_ID=seu_chat_id_aqui
 
 # Opcionais (valores padrão no JSON)
-CHECK_INTERVAL_MINUTES=30
+CHECK_INTERVAL_MINUTES=120
 PRICE_THRESHOLD_PERCENT=0.0
 DISCOUNT_PERCENT=25.0
 ```
@@ -78,7 +78,7 @@ O arquivo `price_monitor_config.json` permite configurar:
 
 ```json
 {
-  "check_interval_minutes": 30,
+  "check_interval_minutes": 120,
   "monitoring_settings": {
     "city": "SP",
     "start_date": "2025-09-08",
