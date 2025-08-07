@@ -2,6 +2,7 @@
 """
 Monitor de Preços StayCharlie - Versão API
 Usa a API oficial em vez de web scraping para melhor performance e confiabilidade
+Configuração: Verificações a cada 2 horas (120 minutos)
 """
 
 import os
